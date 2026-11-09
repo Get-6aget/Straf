@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { MAPS, buildMapData } from './maps.js';
-import { buildMapScene, buildSpawnerPad } from './scene.js';
+import { MAPS, LIGHTING } from './level.js';
+import { buildSpawnerPad } from './scene.js';
 import { NavGraph } from './nav.js';
 import { Fighter } from './fighter.js';
 import { CharacterModel } from './models.js';
@@ -26,7 +26,8 @@ const QUALITY = [{ scale: 0.65 }, { scale: 0.85 }, { scale: 1 }];
 const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
 export class Game {
-  constructor(renderer, hud, music, sky) {
+  constructor(renderer, hud, music, sky, levels) {
+    this.levels = levels;
     this.renderer = renderer;
     this.hud = hud;
     this.music = music;
@@ -126,29 +127,31 @@ export class Game {
 
   loadMap(def) {
     if (this.mapDef && this.mapDef.id === def.id && this.mapRoot) return; // single-map rotation: reuse
-    if (this.mapRoot) {
-      this.scene.remove(this.mapRoot);
-      this.mapRoot.traverse((o) => { if (o.isMesh && o.geometry.attributes.position.count > 200) o.geometry.dispose(); });
-    }
-    this.renderer.shadowMap.enabled = settings.quality > 0;
-    const data = buildMapData(def);
-    const built = buildMapScene(def, data, settings.quality, this.sky);
-    this.mapRoot = built.group;
+    if (this.mapRoot) this.scene.remove(this.mapRoot);
+    const level = this.levels.get(def.id);
+    const L = LIGHTING[def.light] || LIGHTING.overcast;
+    this.mapRoot = new THREE.Group();
+    this.mapRoot.add(level.group);
+    // lights only affect dynamic objects; the level itself is fully baked
+    const hemi = new THREE.HemisphereLight(L.hemiSky, L.hemiGround, L.hemi);
+    const sun = new THREE.DirectionalLight(L.sunColor, L.sun);
+    sun.position.copy(level.sun).multiplyScalar(50);
+    this.mapRoot.add(hemi, sun, sun.target);
     this.scene.add(this.mapRoot);
-    this.scene.fog = built.fog;
-    this.scene.background = built.bg;
-    this.scene.backgroundIntensity = built.light.bgIntensity;
-    this.scene.environment = built.env;
-    this.scene.environmentIntensity = built.light.envIntensity;
-    this.light = built.light;
-    this.world = built.world;
+    this.scene.fog = new THREE.FogExp2(L.fog, L.fogDensity);
+    this.scene.background = this.sky.bg;
+    this.scene.backgroundIntensity = L.bgIntensity;
+    this.scene.environment = this.sky.env;
+    this.scene.environmentIntensity = L.envIntensity;
+    this.light = L;
+    this.world = level.world;
     this.effects.world = this.world;
     if (!this.navCache.has(def.id)) this.navCache.set(def.id, new NavGraph(this.world));
     this.nav = this.navCache.get(def.id);
     this.mapDef = def;
 
-    this.spawns = data.spawns.map((p) => this.snap(p)).filter(Boolean);
-    const spots = data.weapons.map((p) => this.snap(p)).filter(Boolean);
+    this.spawns = level.spawns.map((p) => this.snap({ x: p.x, y: p.y + 1, z: p.z })).filter(Boolean);
+    const spots = level.weapons.map((p) => this.snap({ x: p.x, y: p.y + 1, z: p.z })).filter(Boolean);
     this.spawners = spots.map((pos) => {
       const pad = buildSpawnerPad();
       pad.position.set(pos.x, pos.y, pos.z);
