@@ -33,7 +33,7 @@ export class NavGraph {
         }
         const list = [];
         for (const b of tops) {
-          const y = b.maxY;
+          const y = w.topAt(b, x, z);
           if (y < w.killY + 2) continue;
           // ignore climbable steps right next to the sample point
           if (w.overlapAny(x - 0.05, y + 0.02, z - 0.05, x + 0.05, y + STAND_H, z + 0.05)) continue;

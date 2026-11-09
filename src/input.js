@@ -1,10 +1,10 @@
 import { t } from './i18n.js';
 
 // Keys are bound by physical code so the Russian layout works too.
-// Ctrl is avoided on purpose: Ctrl+W would close the browser tab.
+// Ctrl+W still closes the tab in windowed mode, so C is the primary crouch key.
 const BIND = {
   KeyW: 'fwd', KeyS: 'back', KeyA: 'left', KeyD: 'right', ArrowUp: 'fwd', ArrowDown: 'back', ArrowLeft: 'left', ArrowRight: 'right',
-  Space: 'jump', KeyC: 'crouch', ShiftLeft: 'roll', ShiftRight: 'roll', KeyQ: 'leanL', KeyE: 'leanR', KeyF: 'pickup', KeyG: 'throw', Tab: 'tab',
+  Space: 'jump', KeyC: 'crouch', ControlLeft: 'crouch', ShiftLeft: 'sprint', ShiftRight: 'sprint', KeyQ: 'leanL', KeyE: 'leanR', KeyF: 'pickup', KeyG: 'throw', Tab: 'tab',
 };
 
 export class Input {
@@ -67,7 +67,7 @@ export class Input {
     const h = this.held, e = this.edges;
     const out = {
       fwd: h.has('fwd'), back: h.has('back'), left: h.has('left'), right: h.has('right'),
-      jumpPressed: e.has('jump'), crouch: h.has('crouch'), crouchPressed: e.has('crouch'), rollPressed: e.has('roll'),
+      jumpPressed: e.has('jump'), jump: h.has('jump'), crouch: h.has('crouch'), crouchPressed: e.has('crouch'), sprint: h.has('sprint'),
       fire: h.has('fire'), firePressed: e.has('fire'), alt: h.has('alt'), altPressed: e.has('alt'),
       pickupPressed: e.has('pickup'), throwPressed: e.has('throw'), lean: (h.has('leanR') ? 1 : 0) - (h.has('leanL') ? 1 : 0),
       tab: h.has('tab'), dx: this.dx, dy: this.dy, joy: null,
@@ -80,9 +80,9 @@ export class Input {
       for (const [k, v] of Object.entries(T.btn)) {
         if (k === 'fire') { out.fire ||= v.held; out.firePressed ||= v.edge; }
         if (k === 'alt') { out.alt ||= v.held; out.altPressed ||= v.edge; }
-        if (k === 'jump') out.jumpPressed ||= v.edge;
+        if (k === 'jump') { out.jumpPressed ||= v.edge; out.jump ||= v.held; }
         if (k === 'slide') { out.crouch ||= v.held; out.crouchPressed ||= v.edge; }
-        if (k === 'roll') out.rollPressed ||= v.edge;
+        if (k === 'sprint') out.sprint ||= v.held;
         if (k === 'pick') out.pickupPressed ||= v.edge;
         if (k === 'throw') out.throwPressed ||= v.edge;
         v.edge = false;
@@ -105,7 +105,7 @@ export class Input {
         <button data-b="alt">${t('mobileAlt')}</button>
         <button data-b="jump">${t('mobileJump')}</button>
         <button data-b="slide">${t('mobileSlide')}</button>
-        <button data-b="roll">${t('mobileRoll')}</button>
+        <button data-b="sprint">${t('mobileSprint')}</button>
         <button data-b="pick">${t('mobilePick')}</button>
         <button data-b="throw">${t('mobileThrow')}</button>
       </div>`;

@@ -2,20 +2,51 @@ import * as THREE from 'three';
 
 const cube = new THREE.BoxGeometry(1, 1, 1);
 const sphere = new THREE.IcosahedronGeometry(1, 2);
-const matCache = new Map();
+const plane = new THREE.PlaneGeometry(1, 1);
+const shared = new Set();
 function basic(color, opacity = 1) {
-  const k = color + ':' + opacity;
-  if (!matCache.has(k)) matCache.set(k, new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 }));
-  return matCache.get(k);
+  const m = new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
+  shared.add(m);
+  return m;
+}
+const MAT = { blood: basic(0x7a0a08), bloodDark: basic(0x4a0504), dust: basic(0x8a877a), spark: basic(0xffd890) };
+
+function splatTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(110,8,6,0.95)';
+  for (let i = 0; i < 14; i++) {
+    const r = 8 + Math.random() * 26, a = Math.random() * Math.PI * 2, d = Math.random() * 30;
+    g.beginPath(); g.ellipse(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, r, r * (0.5 + Math.random() * 0.5), a, 0, Math.PI * 2); g.fill();
+  }
+  for (let i = 0; i < 20; i++) {
+    g.beginPath(); g.arc(64 + (Math.random() - 0.5) * 120, 64 + (Math.random() - 0.5) * 120, 1 + Math.random() * 4, 0, Math.PI * 2); g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function holeTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(16, 16, 1, 16, 16, 15);
+  grd.addColorStop(0, 'rgba(10,10,8,1)'); grd.addColorStop(0.35, 'rgba(30,28,24,0.9)'); grd.addColorStop(1, 'rgba(30,28,24,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 32, 32);
+  return new THREE.CanvasTexture(c);
 }
 
 export class Effects {
   constructor(scene) {
     this.scene = scene;
+    this.world = null;
     this.items = [];
     this.decals = [];
-    this.decalGeo = new THREE.PlaneGeometry(0.12, 0.12);
-    this.decalMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a, transparent: true, opacity: 0.7, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
+    this.splatMat = new THREE.MeshBasicMaterial({ map: splatTexture(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
+    this.holeMat = new THREE.MeshBasicMaterial({ map: holeTexture(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
+    this.tracerMat = new THREE.MeshBasicMaterial({ color: 0xfff4c8, transparent: true, opacity: 0.8, depthWrite: false });
   }
 
   add(obj, life, update) {
@@ -23,106 +54,85 @@ export class Effects {
     this.items.push({ obj, life, max: life, update });
   }
 
-  tracer(from, to, color = 0xfff2c0, width = 0.025) {
+  tracer(from, to, width = 0.02) {
     const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
     const len = Math.hypot(dx, dy, dz);
-    if (len < 0.5) return;
-    const m = new THREE.Mesh(cube, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthWrite: false }));
+    if (len < 0.6) return;
+    const m = new THREE.Mesh(cube, this.tracerMat.clone());
     m.scale.set(width, width, len);
     m.position.set(from.x + dx / 2, from.y + dy / 2, from.z + dz / 2);
     m.lookAt(to.x, to.y, to.z);
-    this.add(m, 0.08, (it, k) => { m.material.opacity = 0.85 * k; m.scale.x = m.scale.y = width * k; });
+    this.add(m, 0.07, (it, k) => { m.material.opacity = 0.8 * k; });
   }
 
-  lightning(points, color = 0x9fe8ff) {
-    const g = new THREE.Group();
-    for (let i = 0; i < points.length - 1; i++) {
-      const a = points[i], b = points[i + 1];
-      const segs = 6;
-      let prev = a;
-      for (let s = 1; s <= segs; s++) {
-        const t = s / segs;
-        const j = s === segs ? 0 : 0.35;
-        const p = { x: a.x + (b.x - a.x) * t + (Math.random() - 0.5) * j, y: a.y + (b.y - a.y) * t + (Math.random() - 0.5) * j, z: a.z + (b.z - a.z) * t + (Math.random() - 0.5) * j };
-        const dx = p.x - prev.x, dy = p.y - prev.y, dz = p.z - prev.z, len = Math.hypot(dx, dy, dz);
-        const m = new THREE.Mesh(cube, basic(color));
-        m.scale.set(0.05, 0.05, len);
-        m.position.set(prev.x + dx / 2, prev.y + dy / 2, prev.z + dz / 2);
-        m.lookAt(p.x, p.y, p.z);
-        g.add(m);
-        prev = p;
-      }
-    }
-    this.add(g, 0.15, (it, k) => { g.visible = Math.random() < 0.3 + k; });
-  }
-
-  burst(pos, color, count = 8, speed = 4, size = 0.08, life = 0.5, gravity = 12) {
+  particles(pos, mat, count, speed, size, life, gravity, dir = null) {
     for (let i = 0; i < count; i++) {
-      const m = new THREE.Mesh(cube, basic(color));
-      const s = size * (0.6 + Math.random() * 0.8);
+      const m = new THREE.Mesh(cube, mat);
+      const s = size * (0.5 + Math.random());
       m.scale.setScalar(s);
       m.position.set(pos.x, pos.y, pos.z);
       const v = { x: (Math.random() - 0.5) * speed * 2, y: Math.random() * speed, z: (Math.random() - 0.5) * speed * 2 };
+      if (dir) { v.x += dir.x * speed; v.y += (dir.y || 0) * speed; v.z += dir.z * speed; }
       this.add(m, life * (0.6 + Math.random() * 0.6), (it, k, dt) => {
         v.y -= gravity * dt;
         m.position.x += v.x * dt; m.position.y += v.y * dt; m.position.z += v.z * dt;
-        m.scale.setScalar(s * k);
-        m.rotation.x += dt * 8; m.rotation.y += dt * 6;
+        m.scale.setScalar(s * Math.min(1, k * 2));
       });
     }
   }
 
-  impact(pos, normal, color = 0x777777) {
-    const p = { x: pos.x + normal.x * 0.05, y: pos.y + normal.y * 0.05, z: pos.z + normal.z * 0.05 };
-    this.burst(p, color, 4, 2.5, 0.06, 0.35);
-    this.decal(pos, normal);
+  blood(pos, dir) {
+    const l = Math.hypot(dir.x, dir.y || 0, dir.z) || 1;
+    const d = { x: dir.x / l, y: (dir.y || 0) / l, z: dir.z / l };
+    this.particles(pos, MAT.blood, 7, 3, 0.05, 0.6, 14, d);
+    this.particles(pos, MAT.bloodDark, 4, 2, 0.08, 0.5, 14, d);
+    // splat on the floor behind the victim
+    if (this.world) {
+      const px = pos.x + d.x * 1.2, pz = pos.z + d.z * 1.2;
+      const g = this.world.groundBelow(px, pos.y + 0.2, pz, 6);
+      if (g !== null) this.decal({ x: px, y: g, z: pz }, { x: 0, y: 1, z: 0 }, this.splatMat, 0.9 + Math.random() * 0.9);
+    }
   }
 
-  decal(pos, n) {
-    const m = new THREE.Mesh(this.decalGeo, this.decalMat);
-    m.position.set(pos.x + n.x * 0.01, pos.y + n.y * 0.01, pos.z + n.z * 0.01);
+  dust(pos) { this.particles(pos, MAT.dust, 6, 1.5, 0.07, 0.6, 3); }
+
+  impact(pos, n) {
+    this.particles({ x: pos.x + n.x * 0.05, y: pos.y + n.y * 0.05, z: pos.z + n.z * 0.05 }, MAT.dust, 4, 2, 0.05, 0.4, 8, n);
+    this.particles(pos, MAT.spark, 2, 3, 0.02, 0.15, 0, n);
+    this.decal(pos, n, this.holeMat, 0.12);
+  }
+
+  decal(pos, n, mat, size) {
+    const m = new THREE.Mesh(plane, mat);
+    m.scale.setScalar(size);
+    m.position.set(pos.x + n.x * 0.012, pos.y + n.y * 0.012, pos.z + n.z * 0.012);
     m.lookAt(pos.x + n.x, pos.y + n.y, pos.z + n.z);
+    m.rotateZ(Math.random() * Math.PI * 2);
     this.scene.add(m);
     this.decals.push(m);
-    if (this.decals.length > 120) this.scene.remove(this.decals.shift());
+    if (this.decals.length > 160) this.scene.remove(this.decals.shift());
   }
 
-  explosion(pos, radius, color = 0xffb060) {
-    const core = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ color: 0xfff1c8, transparent: true, opacity: 1, depthWrite: false }));
+  explosion(pos, radius) {
+    const core = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ color: 0xffe7b0, transparent: true, depthWrite: false }));
     core.position.set(pos.x, pos.y, pos.z);
-    this.add(core, 0.35, (it, k) => { const s = radius * (1 - k * k) * 0.8 + 0.3; core.scale.setScalar(s); core.material.opacity = k; });
-    const shell = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false }));
-    shell.position.copy(core.position);
-    this.add(shell, 0.5, (it, k) => { shell.scale.setScalar(radius * (1.1 - k * 0.6)); shell.material.opacity = 0.6 * k; });
-    this.burst(pos, 0x3a3a3a, 14, 9, 0.22, 1.1, 6);
-    this.burst(pos, color, 10, 7, 0.14, 0.6, 4);
+    this.add(core, 0.3, (it, k) => { core.scale.setScalar(radius * (1 - k * k) * 0.7 + 0.3); core.material.opacity = k; });
+    const smoke = new THREE.Mesh(sphere, new THREE.MeshStandardMaterial({ color: 0x55534c, transparent: true, opacity: 0.8, depthWrite: false, roughness: 1 }));
+    smoke.position.copy(core.position);
+    this.add(smoke, 1.4, (it, k, dt) => { smoke.scale.setScalar(radius * (1.1 - k * 0.6)); smoke.position.y += dt * 0.8; smoke.material.opacity = 0.7 * k; });
+    this.particles(pos, MAT.dust, 14, 8, 0.16, 1.0, 9);
+    this.particles(pos, MAT.spark, 10, 9, 0.05, 0.4, 6);
+    if (this.world) {
+      const g = this.world.groundBelow(pos.x, pos.y + 0.3, pos.z, 2);
+      if (g !== null) this.decal({ x: pos.x, y: g, z: pos.z }, { x: 0, y: 1, z: 0 }, this.holeMat, radius * 0.7);
+    }
   }
 
-  ring(pos, dir, color = 0xc49cff, range = 10) {
-    const geo = new THREE.TorusGeometry(1, 0.06, 4, 24);
-    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, depthWrite: false }));
+  muzzle(pos) {
+    const m = new THREE.Mesh(sphere, MAT.spark);
     m.position.set(pos.x, pos.y, pos.z);
-    m.lookAt(pos.x + dir.x, pos.y + dir.y, pos.z + dir.z);
-    let d = 0;
-    this.add(m, 0.35, (it, k, dt) => {
-      d += dt * range * 3;
-      m.position.set(pos.x + dir.x * d, pos.y + dir.y * d, pos.z + dir.z * d);
-      m.scale.setScalar(0.3 + d * 0.55);
-      m.material.opacity = 0.8 * k;
-    });
-  }
-
-  nova(pos, radius, color = 0x9fe8ff) {
-    const m = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5, depthWrite: false, wireframe: true }));
-    m.position.set(pos.x, pos.y, pos.z);
-    this.add(m, 0.4, (it, k) => { m.scale.setScalar(radius * (1 - k) + 0.3); m.material.opacity = 0.5 * k; });
-  }
-
-  muzzle(pos, color = 0xffd27a) {
-    const m = new THREE.Mesh(sphere, basic(color, 0.9));
-    m.position.set(pos.x, pos.y, pos.z);
-    m.scale.setScalar(0.12);
-    this.add(m, 0.05, () => {});
+    m.scale.setScalar(0.1);
+    this.add(m, 0.04, () => {});
   }
 
   update(dt) {
@@ -131,10 +141,7 @@ export class Effects {
       it.life -= dt;
       if (it.life <= 0) {
         this.scene.remove(it.obj);
-        if (it.obj.material && !matCache.has(it.obj.material) && it.obj.material.dispose) {
-          /* per-effect materials are tiny; dispose to avoid leaks */
-          if (![...matCache.values()].includes(it.obj.material)) it.obj.material.dispose();
-        }
+        if (it.obj.material && !shared.has(it.obj.material) && it.obj.material !== this.tracerMat) it.obj.material.dispose();
         this.items.splice(i, 1);
         continue;
       }

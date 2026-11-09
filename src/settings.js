@@ -1,6 +1,6 @@
-const KEY = 'perekat_settings_v1';
+const KEY = 'perekat_settings_v2';
 const DEFAULTS = {
-  name: '', sens: 1.0, fov: 95, music: 0.5, sfx: 0.8, quality: 1, rollCam: true, difficulty: 1, rounds: 4, invertY: false,
+  name: '', sens: 1.0, fov: 100, music: 0.5, sfx: 0.8, quality: 1, difficulty: 1, rounds: 4, invertY: false, autoSprint: false, speedo: false, inGameMusic: true,
 };
 
 export const settings = { ...DEFAULTS };

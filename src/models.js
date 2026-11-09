@@ -1,208 +1,247 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { WEAPONS } from './weapons.js';
+import { pbr, knitTexture, clothTexture } from './assets.js';
 
-const matCache = new Map();
-export function mat(color, opts = {}) {
-  const key = color + JSON.stringify(opts);
-  if (!matCache.has(key)) {
-    const m = opts.emissive
-      ? new THREE.MeshBasicMaterial({ color, fog: true, transparent: !!opts.transparent, opacity: opts.opacity ?? 1 })
-      : new THREE.MeshLambertMaterial({ color, flatShading: true, transparent: !!opts.transparent, opacity: opts.opacity ?? 1 });
-    matCache.set(key, m);
-  }
-  return matCache.get(key);
-}
+const rbox = new RoundedBoxGeometry(1, 1, 1, 2, 0.12);
+const cylZ = new THREE.CylinderGeometry(1, 1, 1, 14).rotateX(Math.PI / 2);
+const cylX = new THREE.CylinderGeometry(1, 1, 1, 14).rotateZ(Math.PI / 2);
+const cylY = new THREE.CylinderGeometry(1, 1, 1, 14);
+const sph = new THREE.SphereGeometry(1, 18, 12);
 
-const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 10).rotateX(Math.PI / 2);
-const sphGeo = new THREE.IcosahedronGeometry(1, 1);
-
-function weaponMat(code, accent) {
+const weaponMats = new Map();
+function weaponMat(code, paint) {
+  const k = code + paint;
+  if (weaponMats.has(k)) return weaponMats.get(k);
+  let m;
   switch (code) {
-    case 'm': return mat(0x2c2f33);
-    case 'l': return mat(0x9aa0a6);
-    case 'w': return mat(0x6b4a2e);
-    case 'g': return mat(accent, { emissive: true });
-    default: return mat(accent);
+    case 'rust': m = pbr('rust', { tint: 0xd9c2b0 }); break;
+    case 'dark': m = pbr('rust', { tint: 0x4a4440, rough: 0.9 }); break;
+    case 'paint': m = pbr('paint', { tint: paint }); break;
+    case 'wood': m = pbr('wood', { tint: 0xc08c62, metal: 0 }); break;
+    case 'grip': m = new THREE.MeshStandardMaterial({ color: 0x2a2724, roughness: 0.95 }); break;
+    case 'brass': m = new THREE.MeshStandardMaterial({ color: 0xa8823a, roughness: 0.4, metalness: 0.9 }); break;
+    case 'glow': m = new THREE.MeshBasicMaterial({ color: paint }); break;
+    default: m = pbr('rust');
   }
+  // Weapons are small, so tile the photo textures densely.
+  weaponMats.set(k, m);
+  return m;
 }
 
 export function buildWeaponModel(id) {
   const def = WEAPONS[id];
   const g = new THREE.Group();
   if (!def) return g;
-  for (const [s, x, y, z, sx, sy, sz, m] of def.model) {
-    let mesh;
-    if (s === 'b') { mesh = new THREE.Mesh(boxGeo, weaponMat(m, def.color)); mesh.scale.set(sx, sy, sz); }
-    else if (s === 'c') { mesh = new THREE.Mesh(cylGeo, weaponMat(m, def.color)); mesh.scale.set(sx, sx, sz); }
-    else { mesh = new THREE.Mesh(sphGeo, weaponMat(m, def.color)); mesh.scale.setScalar(sx); }
+  for (const [s, x, y, z, sx, sy, sz, m, rx = 0] of def.model) {
+    let geo, sc;
+    if (s === 'b') { geo = rbox; sc = [sx, sy, sz]; }
+    else if (s === 'c') { geo = cylZ; sc = [sx, sx, sz]; }
+    else if (s === 'x') { geo = cylX; sc = [sz || sx * 0.6, sx, sx]; }
+    else if (s === 'y') { geo = cylY; sc = [sx, sy, sx]; }
+    else { geo = sph; sc = [sx, sx * 1.15, sx]; }
+    const mesh = new THREE.Mesh(geo, weaponMat(m, def.paint));
+    mesh.scale.set(...sc);
     mesh.position.set(x, y, z);
+    mesh.rotation.x = rx;
     mesh.castShadow = true;
     g.add(mesh);
   }
   return g;
 }
 
-export function buildProjectileMesh(type, color) {
+export function buildProjectileMesh(type, paint) {
   const g = new THREE.Group();
-  const add = (geo, m, sx, sy, sz, x = 0, y = 0, z = 0) => {
-    const me = new THREE.Mesh(geo, m); me.scale.set(sx, sy, sz); me.position.set(x, y, z); g.add(me); return me;
-  };
+  const add = (geo, m, sx, sy, sz, x = 0, y = 0, z = 0) => { const me = new THREE.Mesh(geo, m); me.scale.set(sx, sy, sz); me.position.set(x, y, z); g.add(me); return me; };
   switch (type) {
     case 'rocket':
-      add(cylGeo, mat(color), 0.07, 0.07, 0.45);
-      add(cylGeo, mat(0xffc46b, { emissive: true }), 0.05, 0.05, 0.12, 0, 0, 0.28);
+      add(cylZ, weaponMat('paint', paint), 0.065, 0.065, 0.5);
+      add(sph, weaponMat('rust', 0), 0.065, 0.065, 0.12, 0, 0, -0.25);
+      add(cylZ, new THREE.MeshBasicMaterial({ color: 0xffc06a }), 0.05, 0.05, 0.12, 0, 0, 0.3);
       break;
-    case 'grenade': add(sphGeo, mat(color), 0.12, 0.12, 0.12); break;
-    case 'mine':
-      add(cylGeo, mat(color), 0.14, 0.14, 0.06);
-      add(sphGeo, mat(0xff4b3a, { emissive: true }), 0.04, 0.04, 0.04, 0, 0, -0.04);
+    case 'grenade':
+      add(sph, weaponMat('paint', paint), 0.075, 0.085, 0.075);
+      add(cylY, weaponMat('rust', 0), 0.022, 0.05, 0.022, 0, 0.09, 0);
       break;
-    case 'bolt': add(boxGeo, mat(0x8a6a3a), 0.025, 0.025, 0.6); break;
-    case 'knife': add(boxGeo, mat(0xcfd3d6), 0.02, 0.05, 0.32); break;
-    case 'harpoon':
-      add(boxGeo, mat(0x9aa0a6), 0.03, 0.03, 0.8);
-      add(boxGeo, mat(color), 0.12, 0.03, 0.08, 0, 0, -0.38);
-      break;
-    case 'ball': add(sphGeo, mat(color, { emissive: true }), 0.13, 0.13, 0.13); break;
-    default: add(sphGeo, mat(color), 0.1, 0.1, 0.1);
+    default: add(sph, weaponMat('rust', 0), 0.08, 0.08, 0.08);
   }
+  g.traverse((o) => { o.castShadow = true; });
   return g;
 }
 
-// ---------------- Character ----------------
-// Low-poly mannequin with procedural pose animation per movement state.
+// ---------------- character ----------------
+const capsule = new THREE.CapsuleGeometry(1, 1, 6, 12);
+const HATS = ['none', 'beanie', 'hardhat', 'cap', 'none'];
+
+function clothMat(color) { return new THREE.MeshStandardMaterial({ color, map: clothTexture(), roughness: 0.92 }); }
+
+// Lanky worker in overalls with an oversized knitted balaclava head.
 export class CharacterModel {
-  constructor(color) {
+  constructor(color, seed = 0) {
     this.root = new THREE.Group();
-    this.body = new THREE.Group(); // pivot at hips
+    this.body = new THREE.Group();
     this.root.add(this.body);
-    const skin = mat(color);
-    const dark = mat(0x26282b);
-    const visor = mat(0x111214);
+    const overall = clothMat(color);
+    const shirt = clothMat(0x5e5a50);
+    const boot = new THREE.MeshStandardMaterial({ color: 0x2a2520, roughness: 0.8 });
+    const glove = new THREE.MeshStandardMaterial({ color: 0x3b3a33, roughness: 0.85 });
+    const knit = new THREE.MeshStandardMaterial({ color: [0x3c3f36, 0x5a4636, 0x2f3438, 0x4e4a3a][seed % 4], map: knitTexture(), roughness: 1 });
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0xe8e2c8, roughness: 0.35, emissive: 0x2a2a20 });
+    const skin = new THREE.MeshStandardMaterial({ color: 0xc9b49a, roughness: 0.7 });
 
-    const box = (m, sx, sy, sz, x, y, z, parent) => {
-      const me = new THREE.Mesh(boxGeo, m); me.scale.set(sx, sy, sz); me.position.set(x, y, z);
-      me.castShadow = true; parent.add(me); return me;
+    const part = (geo, m, sx, sy, sz, x, y, z, parent) => {
+      const me = new THREE.Mesh(geo, m); me.scale.set(sx, sy, sz); me.position.set(x, y, z);
+      me.castShadow = true; me.receiveShadow = true; parent.add(me); return me;
     };
+    const pivot = (x, y, z, parent) => { const p = new THREE.Group(); p.position.set(x, y, z); parent.add(p); return p; };
 
-    this.hips = new THREE.Group(); this.hips.position.y = 0.9; this.body.add(this.hips);
-    this.torso = new THREE.Group(); this.hips.add(this.torso);
-    box(skin, 0.5, 0.62, 0.28, 0, 0.33, 0, this.torso);
-    box(dark, 0.52, 0.1, 0.3, 0, 0.05, 0, this.torso);
-    this.head = new THREE.Group(); this.head.position.y = 0.72; this.torso.add(this.head);
-    box(skin, 0.32, 0.32, 0.32, 0, 0.12, 0, this.head);
-    box(visor, 0.26, 0.09, 0.05, 0, 0.15, -0.16, this.head);
+    this.hips = pivot(0, 0.95, 0, this.body);
+    part(rbox, overall, 0.38, 0.2, 0.24, 0, 0.02, 0, this.hips);
+    this.spine = pivot(0, 0.08, 0, this.hips);
+    part(capsule, overall, 0.2, 0.17, 0.15, 0, 0.27, 0, this.spine); // torso
+    part(rbox, overall, 0.3, 0.2, 0.06, 0, 0.32, -0.12, this.spine); // bib
+    part(rbox, shirt, 0.42, 0.12, 0.22, 0, 0.5, 0, this.spine); // shoulders
+    this.neck = pivot(0, 0.6, 0, this.spine);
+    part(cylY, knit, 0.06, 0.1, 0.06, 0, 0.04, 0, this.neck);
+    this.head = pivot(0, 0.1, 0, this.neck);
+    part(sph, knit, 0.2, 0.25, 0.21, 0, 0.2, 0, this.head);
+    part(rbox, skin, 0.27, 0.075, 0.08, 0, 0.25, -0.16, this.head); // eye slit
+    part(sph, eyeMat, 0.035, 0.03, 0.02, -0.06, 0.25, -0.2, this.head);
+    part(sph, eyeMat, 0.035, 0.03, 0.02, 0.06, 0.25, -0.2, this.head);
+    this.buildHat(HATS[seed % HATS.length], knit);
 
-    const limb = (x, y, parent, len, w) => {
-      const piv = new THREE.Group(); piv.position.set(x, y, 0); parent.add(piv);
-      box(skin, w, len, w, 0, -len / 2, 0, piv);
-      return piv;
+    const limb = (x, y, parent, len, r, m, m2, foot) => {
+      const upper = pivot(x, y, 0, parent);
+      part(capsule, m, r, len * 0.35, r, 0, -len * 0.25, 0, upper);
+      const lower = pivot(0, -len * 0.5, 0, upper);
+      part(capsule, m, r * 0.88, len * 0.35, r * 0.88, 0, -len * 0.25, 0, lower);
+      const end = foot
+        ? part(rbox, m2, 0.13, 0.09, 0.26, 0, -len * 0.5 - 0.02, -0.05, lower)
+        : part(sph, m2, 0.055, 0.065, 0.055, 0, -len * 0.5 - 0.02, 0, lower);
+      return { upper, lower, end };
     };
-    this.armL = limb(-0.33, 0.6, this.torso, 0.62, 0.15);
-    this.armR = limb(0.33, 0.6, this.torso, 0.62, 0.15);
-    this.legL = limb(-0.13, 0, this.hips, 0.9, 0.18);
-    this.legR = limb(0.13, 0, this.hips, 0.9, 0.18);
-    this.hand = new THREE.Group(); this.hand.position.set(0, -0.58, -0.05); this.armR.add(this.hand);
-    this.weaponId = null;
-    this.weaponMesh = null;
-    this.phase = 0;
+    this.armL = limb(-0.26, 0.48, this.spine, 0.66, 0.065, shirt, glove, false);
+    this.armR = limb(0.26, 0.48, this.spine, 0.66, 0.065, shirt, glove, false);
+    this.legL = limb(-0.11, -0.03, this.hips, 0.9, 0.095, overall, boot, true);
+    this.legR = limb(0.11, -0.03, this.hips, 0.9, 0.095, overall, boot, true);
+    this.handR = pivot(0, -0.36, -0.02, this.armR.lower);
+    this.handL = pivot(0, -0.36, -0.02, this.armL.lower);
+    this.weaponR = null; this.weaponL = null; this.idR = null; this.idL = null;
+    this.phase = Math.random() * 6;
     this.deadT = 0;
-    this.rollAngle = 0;
+    this.fallDir = { x: 0, z: 1 };
   }
 
-  setWeapon(id) {
-    if (this.weaponId === id) return;
-    this.weaponId = id;
-    if (this.weaponMesh) this.hand.remove(this.weaponMesh);
-    this.weaponMesh = null;
-    if (id && id !== 'fists') {
-      this.weaponMesh = buildWeaponModel(id);
-      this.weaponMesh.rotation.x = -Math.PI / 2;
-      this.weaponMesh.scale.setScalar(1.3);
-      this.hand.add(this.weaponMesh);
+  buildHat(type, knit) {
+    const add = (geo, m, sx, sy, sz, x, y, z) => { const me = new THREE.Mesh(geo, m); me.scale.set(sx, sy, sz); me.position.set(x, y, z); me.castShadow = true; this.head.add(me); };
+    if (type === 'beanie') { add(sph, new THREE.MeshStandardMaterial({ color: 0x8a3a2a, map: knitTexture(), roughness: 1 }), 0.215, 0.16, 0.22, 0, 0.33, 0); add(sph, knit, 0.05, 0.05, 0.05, 0, 0.5, 0); }
+    else if (type === 'hardhat') { const m = new THREE.MeshStandardMaterial({ color: 0xc8a032, roughness: 0.5 }); add(sph, m, 0.23, 0.15, 0.24, 0, 0.36, 0); add(cylY, m, 0.28, 0.015, 0.29, 0, 0.33, -0.02); }
+    else if (type === 'cap') { const m = clothMat(0x3a4a5a); add(sph, m, 0.215, 0.13, 0.22, 0, 0.36, 0); add(rbox, m, 0.2, 0.02, 0.14, 0, 0.36, -0.2); }
+  }
+
+  setWeapons(f) {
+    const r = f.hands.R ? f.hands.R.id : null, l = f.hands.L ? f.hands.L.id : null;
+    if (r !== this.idR) {
+      if (this.weaponR) this.handR.remove(this.weaponR);
+      this.weaponR = r ? buildWeaponModel(r) : null;
+      if (this.weaponR) { this.weaponR.rotation.x = -Math.PI / 2; this.weaponR.scale.setScalar(1.2); this.handR.add(this.weaponR); }
+      this.idR = r;
+    }
+    if (l !== this.idL) {
+      if (this.weaponL) this.handL.remove(this.weaponL);
+      this.weaponL = l ? buildWeaponModel(l) : null;
+      if (this.weaponL) { this.weaponL.rotation.x = -Math.PI / 2; this.weaponL.scale.setScalar(1.2); this.handL.add(this.weaponL); }
+      this.idL = l;
     }
   }
 
   update(dt, f) {
-    const L = (a, b, k) => a + (b - a) * Math.min(1, dt * k);
+    const k = Math.min(1, dt * 14);
+    const L = (o, prop, v, kk = k) => { o[prop] += (v - o[prop]) * kk; };
     this.root.position.set(f.pos.x, f.pos.y, f.pos.z);
-    this.setWeapon(f.weapon ? f.weapon.id : null);
+    this.setWeapons(f);
 
     if (!f.alive) {
+      // topple in the direction of the killing blow
       this.deadT += dt;
-      const t = Math.min(1, this.deadT * 3);
-      this.body.rotation.x = L(this.body.rotation.x, Math.PI / 2 * 0.98, 8);
-      this.body.position.y = L(this.body.position.y, 0.15, 8);
-      this.armL.rotation.x = L(this.armL.rotation.x, -2.6, 6);
-      this.armR.rotation.x = L(this.armR.rotation.x, -2.4, 6);
-      this.root.visible = this.deadT < 4 || Math.floor(this.deadT * 8) % 2 === 0 ? this.deadT < 5 : false;
-      return t;
+      const t = Math.min(1, this.deadT * 2.6);
+      const e = t * t;
+      this.body.rotation.x = e * (Math.PI / 2) * 0.96;
+      this.body.position.y = 0.05 * e;
+      L(this.armL.upper.rotation, 'x', -2.4, dt * 5); L(this.armR.upper.rotation, 'x', -2.0, dt * 5);
+      L(this.armL.upper.rotation, 'z', 0.6, dt * 5); L(this.armR.upper.rotation, 'z', -0.5, dt * 5);
+      L(this.legL.lower.rotation, 'x', 0.4, dt * 5); L(this.head.rotation, 'x', -0.4, dt * 5);
+      this.root.visible = this.deadT < 6;
+      return;
     }
     this.deadT = 0;
     this.root.visible = true;
+    this.body.position.y = 0;
 
     const hs = f.horizSpeed;
-    // Facing: yaw of the fighter; while rolling/sliding face movement direction
     let face = f.yaw;
-    if (f.state === 'roll' || f.state === 'dive') face = Math.atan2(-f.rollDir.x, -f.rollDir.z);
-    else if (f.state === 'slide' && hs > 0.5) face = Math.atan2(-f.vel.x, -f.vel.z);
+    if (f.state === 'slide' && hs > 0.5) face = Math.atan2(-f.vel.x, -f.vel.z);
     let dy = face - this.root.rotation.y;
     while (dy > Math.PI) dy -= Math.PI * 2;
     while (dy < -Math.PI) dy += Math.PI * 2;
-    this.root.rotation.y += dy * Math.min(1, dt * 14);
+    this.root.rotation.y += dy * Math.min(1, dt * 12);
 
-    let bodyX = 0, bodyY = 0, bodyZ = 0, hipsY = 0.9, torsoX = 0, legL = 0, legR = 0, armL = 0, armR = -1.3, headX = f.pitch;
-    let kneeTuck = 0;
+    // pose targets
+    const P = { bodyX: 0, bodyZ: 0, hipsY: 0.95, spineX: 0, headX: Math.max(-0.7, Math.min(0.7, f.pitch)) * 0.7,
+      lu: 0, ll: 0, ru: 0, rl: 0, aLu: 0, aLl: -0.3, aLz: 0.1, aRu: -1.3, aRl: -0.2, aRz: 0 };
+    const armed = !!(f.hands.R);
+    const twoH = armed && f.hands.R.def.hands === 2;
 
-    if (f.state === 'roll') {
-      // full forward roll around the hips
-      const t = Math.min(1, f.stateT / 0.5);
-      this.rollAngle = -t * Math.PI * 2;
-      bodyX = this.rollAngle; bodyY = 0.45; hipsY = 0.45;
-      legL = legR = -2.1; armL = -1.8; armR = -1.8; torsoX = -0.6; headX = 0;
-      kneeTuck = 1;
-    } else if (f.state === 'dive') {
-      bodyX = -1.25; bodyY = 0.6; hipsY = 0.5; armL = -2.9; armR = -2.9; legL = 0.25; legR = 0.1; headX = 0.9;
-    } else if (f.state === 'slide') {
-      // lean back, lead leg forward, trailing hand on ground
-      bodyX = 0.95; bodyY = -0.15; hipsY = 0.45; legL = -1.5; legR = -0.6; armL = 0.7; armR = -1.6; headX = f.pitch - 0.7;
-      bodyZ = Math.sin(f.stateT * 30) * 0.02;
-    } else if (f.wallAnim > 0) {
-      // wall kick: twist away from the wall, kicking leg extended toward it
-      const t = 1 - f.wallAnim / 0.4;
-      const k = Math.sin(t * Math.PI);
-      const n = f.wallNormal;
-      const localX = n.x * Math.cos(this.root.rotation.y) - n.z * Math.sin(this.root.rotation.y);
-      bodyZ = -localX * 0.6 * k;
-      legL = -1.2 * k; legR = 0.6 * k; armL = -2.2 * k; torsoX = 0.2 * k;
-      bodyY = 0;
+    if (f.state === 'slide') {
+      // lean back, lead leg straight out, trailing knee bent, hand dragging on the floor
+      P.hipsY = 0.42; P.bodyX = 0; P.spineX = 0.55; P.headX = -0.35 + f.pitch * 0.5;
+      P.lu = -1.45; P.ll = 0.05; P.ru = -0.55; P.rl = 1.6;
+      P.aLu = 0.6; P.aLl = -0.2; P.aLz = 0.9;
+      P.bodyZ = Math.sin(f.stateT * 40) * 0.015;
+    } else if (f.state === 'wallrun') {
+      // body tilts off the wall, legs keep running on it
+      this.phase += dt * 14;
+      const s = Math.sin(this.phase);
+      const side = Math.sign(f.wallNormal.x * Math.cos(this.root.rotation.y) - f.wallNormal.z * Math.sin(this.root.rotation.y)) || 1;
+      P.bodyZ = 0.45 * side; P.spineX = -0.25;
+      P.lu = -0.9 + s * 0.8; P.ll = 0.9 + Math.max(0, -s); P.ru = -0.9 - s * 0.8; P.rl = 0.9 + Math.max(0, s);
+      P.aLu = -0.6; P.aLz = 1.1 * side;
+    } else if (f.state === 'mantle') {
+      P.aLu = -2.9; P.aRu = -2.9; P.aLl = -0.6; P.aRl = -0.6; P.lu = -1.4; P.ll = 1.6; P.ru = -0.4; P.rl = 0.6; P.spineX = -0.4;
+    } else if (f.wallKick > 0) {
+      const t = Math.sin((1 - f.wallKick / 0.35) * Math.PI);
+      P.lu = -1.6 * t; P.ll = 0.1; P.ru = 0.5 * t; P.rl = 1.2 * t; P.spineX = -0.3 * t; P.aLu = -1.8 * t; P.aLz = 0.8 * t;
     } else if (!f.onGround) {
-      legL = -0.7; legR = 0.3; armL = -0.6;
+      P.lu = -0.9; P.ll = 1.3; P.ru = -0.25; P.rl = 0.7; P.aLu = -0.8; P.aLz = 0.5; P.spineX = -0.1;
     } else if (f.crouching) {
-      hipsY = 0.55; legL = -1.2; legR = -1.0; torsoX = -0.3;
-      this.phase += hs * dt * 2;
-      legL += Math.sin(this.phase) * 0.3; legR -= Math.sin(this.phase) * 0.3;
+      this.phase += hs * dt * 2.2;
+      const s = Math.sin(this.phase) * Math.min(1, hs / 2.5);
+      P.hipsY = 0.6; P.spineX = -0.35;
+      P.lu = -1.3 + s * 0.4; P.ll = 1.8 - s * 0.3; P.ru = -1.3 - s * 0.4; P.rl = 1.8 + s * 0.3;
     } else {
-      this.phase += hs * dt * 1.7;
-      const amp = Math.min(1, hs / 7) * 0.9;
-      legL = Math.sin(this.phase) * amp; legR = -Math.sin(this.phase) * amp;
-      armL = -Math.sin(this.phase) * amp * 0.8;
-      hipsY = 0.9 + Math.abs(Math.cos(this.phase)) * 0.05 * amp;
+      this.phase += hs * dt * (f.sprinting ? 1.55 : 1.9);
+      const a = Math.min(1, hs / 7.4);
+      const s = Math.sin(this.phase), c = Math.cos(this.phase);
+      P.lu = s * 0.95 * a; P.ru = -s * 0.95 * a;
+      P.ll = Math.max(0, -c) * 1.4 * a + 0.05; P.rl = Math.max(0, c) * 1.4 * a + 0.05;
+      P.aLu = -s * 0.8 * a; P.aLl = -0.4 - 0.5 * a;
+      P.spineX = -0.22 * a * (f.sprinting ? 1.4 : 1);
+      P.hipsY = 0.95 - Math.abs(c) * 0.06 * a;
     }
-    if (f.state !== 'roll') this.rollAngle = 0;
+    // weapon arms
+    if (armed && f.state !== 'mantle') {
+      P.aRu = -1.35 - f.pitch * 0.9; P.aRl = -0.15; P.aRz = 0.05;
+      if (twoH) { P.aLu = -1.2 - f.pitch * 0.9; P.aLl = -0.7; P.aLz = -0.55; }
+      if (f.hands.L) { P.aLu = -1.35 - f.pitch * 0.9; P.aLl = -0.15; P.aLz = -0.05; }
+    }
 
-    const k = f.state === 'roll' ? 40 : 14;
-    this.body.rotation.x = f.state === 'roll' ? bodyX : L(this.body.rotation.x, bodyX, k);
-    this.body.rotation.z = L(this.body.rotation.z, bodyZ + f.lean * 0.35, k);
-    this.body.position.y = L(this.body.position.y, bodyY, k);
-    this.hips.position.y = L(this.hips.position.y, hipsY, k);
-    this.torso.rotation.x = L(this.torso.rotation.x, torsoX, k);
-    this.legL.rotation.x = L(this.legL.rotation.x, legL, k);
-    this.legR.rotation.x = L(this.legR.rotation.x, legR, k);
-    this.armL.rotation.x = L(this.armL.rotation.x, armL, k);
-    this.armR.rotation.x = L(this.armR.rotation.x, f.weapon && f.weapon.id !== 'fists' && f.state !== 'roll' ? -1.45 - f.pitch : armR, k);
-    this.head.rotation.x = L(this.head.rotation.x, Math.max(-0.8, Math.min(0.8, headX)), k);
-    this.legL.scale.y = this.legR.scale.y = L(this.legL.scale.y, kneeTuck ? 0.6 : 1, k);
+    L(this.body.rotation, 'x', P.bodyX); L(this.body.rotation, 'z', P.bodyZ + f.lean * 0.3);
+    L(this.hips.position, 'y', P.hipsY);
+    L(this.spine.rotation, 'x', P.spineX);
+    L(this.head.rotation, 'x', P.headX);
+    L(this.legL.upper.rotation, 'x', P.lu); L(this.legL.lower.rotation, 'x', P.ll);
+    L(this.legR.upper.rotation, 'x', P.ru); L(this.legR.lower.rotation, 'x', P.rl);
+    L(this.armL.upper.rotation, 'x', P.aLu); L(this.armL.lower.rotation, 'x', P.aLl); L(this.armL.upper.rotation, 'z', -P.aLz);
+    L(this.armR.upper.rotation, 'x', P.aRu); L(this.armR.lower.rotation, 'x', P.aRl); L(this.armR.upper.rotation, 'z', P.aRz);
   }
 }

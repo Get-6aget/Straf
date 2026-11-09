@@ -13,10 +13,10 @@ await page.goto(url);
 await page.waitForFunction(() => window.__game && window.__game.state !== 'idle', null, { timeout: 30000 });
 
 const simSeconds = Number(process.argv[3] || 90);
-for (let i = 0; i < 20; i++) {
+for (let i = 0; i < 4; i++) {
   const r = await page.evaluate(([i, simSeconds]) => {
     const g = window.__game;
-    g.startMatch({ mode: 'ffa', attract: true, roundsToWin: 99, mapIndex: i });
+    g.startMatch({ mode: 'ffa', attract: true, roundsToWin: 99, mapIndex: 0 });
     const map = g.mapDef.id;
     let takes = 0, lastTake = g.takeNo, roundStart = g.roundNo, voids = 0, states = {};
     const kf = document.querySelector('#h-kf');
@@ -27,10 +27,10 @@ for (let i = 0; i < 20; i++) {
     g.kill = (v, a, w, o) => { const key = (o && o.void ? 'void:' : '') + (w || 'none'); causes[key] = (causes[key] || 0) + 1; return origKill(v, a, w, o); };
     for (let s = 0; s < simSeconds * 60; s++) {
       g.update(1 / 60, null);
-      if (g.mapDef.id !== map) break; // round changed map
+      void map;
       if (g.takeNo !== lastTake) { takes++; lastTake = g.takeNo; }
       for (const f of g.fighters) if (f.alive) states[f.state] = (states[f.state] || 0) + 1;
-      if (g.fighters.some((f) => f.wallAnim > 0.39)) states.wallbounce = (states.wallbounce || 0) + 1;
+      if (g.fighters.some((f) => f.wallKick > 0.34)) states.walljump = (states.walljump || 0) + 1;
     }
     g.kill = origKill;
     const kills = g.fighters.reduce((a, f) => a + f.kills, 0);

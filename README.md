@@ -1,6 +1,6 @@
 # ПЕРЕКАТ — арена-шутер для Яндекс Игр
 
-Быстрый шутер от первого лица с короткими раундами против ботов. Он вдохновлён жанром арена-шутеров вроде STRAFTAT, но весь контент свой: названия, карты, модели, оружие и музыка.
+Быстрый шутер от первого лица с короткими раундами против ботов. Стиль, механики и структура повторяют STRAFTAT (подробности — в `docs/research.md`), а весь контент свой. Сейчас это **вертикальный срез v2**: одна карта «Двор», 11 видов оружия, новое движение без перекатов. Текстуры и небо — CC0 с Poly Haven.
 
 ## Запуск
 
@@ -46,4 +46,8 @@ npm run zip        # сборка + perekat-yandex.zip для загрузки �
 | `src/game.js` | матч, тейки и раунды, камера, спектатор, киллфид |
 | `src/viewmodel.js` | оружие от первого лица и постобработка |
 | `src/audio.js`, `src/music.js` | синтезированные звуки и музыка |
-| `scripts/*.mjs` | проверки в headless Chrome (smoke, симуляция всех карт, скриншоты анимаций) |
+| `scripts/*.mjs` | проверки в headless Chrome: `sim.mjs` (бой ботов), `shots.mjs` (скриншоты меню, вида от первого лица и поз) |
+
+## Сторонние ресурсы
+
+Фототекстуры и HDRI-небо: [Poly Haven](https://polyhaven.com), лицензия CC0. Это concrete_wall_008, concrete_floor_worn_001, concrete_moss, cracked_concrete_wall, rusty_metal_02, rusty_painted_metal, brown_planks_05, brick_wall_10, aerial_grass_rock, dirty_tiles и kloofendal_overcast_puresky.
