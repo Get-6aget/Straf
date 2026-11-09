@@ -1,0 +1,32 @@
+<!doctype html>
+<html><body style="margin:0;background:#445">
+<script type="module">
+import * as THREE from 'three';
+import { Viewmodel } from '/src/viewmodel.js';
+import { WEAPONS, newWeaponInstance } from '/src/weapons.js';
+
+const W = 640, H = 360;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+const vm = new Viewmodel();
+vm.setEnvironment(new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture);
+vm.scene.background = new THREE.Color(0x5a6560);
+const rim = new THREE.DirectionalLight(0xffffff, 0.3); rim.position.set(-1, 0.5, -1); vm.scene.add(rim);
+
+window.shot = (ids, cam) => {
+  const [r, l] = ids;
+  const f = {
+    hands: { R: r ? newWeaponInstance(r) : null, L: l ? newWeaponInstance(l) : null },
+    horizSpeed: 0, onGround: true, state: 'normal', sprinting: false, vel: { x: 0, y: 0, z: 0 }, wallNormal: { x: 0, z: 0 },
+  };
+  vm.camera.position.set(0, 0, 0); vm.camera.rotation.set(0, 0, 0);
+  for (let i = 0; i < 40; i++) vm.update(0.05, f, { dx: 0, dy: 0 }, W / H);
+  if (cam) { vm.camera.position.set(cam[0], cam[1], cam[2]); vm.camera.lookAt(cam[3], cam[4], cam[5]); }
+  renderer.render(vm.scene, vm.camera);
+  return renderer.domElement.toDataURL('image/png');
+};
+window.ready = true;
+</script></body></html>

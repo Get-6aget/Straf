@@ -125,12 +125,12 @@ export const MAPS = [
       const lx = HX1 - HX0, lz = HZ1 - HZ0;
       const gWin = { w: 1.5, y: 1.0, h: 1.4, frame: 'concrete', sill: 'concrete' };
       const uWin = { w: 1.6, y: FH + 0.9, h: 1.5, frame: 'concrete', sill: 'concrete' };
-      wall('x', HX0, HZ0 + T / 2, lx, 0, FH * 2, T, 'plaster', [
+      wall('x', HX0, HZ0 + T / 2, lx, 0, FH * 2, T, 'concrete', [
         { at: 4, w: 1.4, y: 0, h: 2.4, frame: 'concrete' }, { ...gWin, at: 9.5 }, { ...uWin, at: 3 }, { ...uWin, at: 7.5 }, { ...uWin, at: 11.5 }], { plinth: 'concrete' });
-      wall('x', HX0, HZ1 - T / 2, lx, 0, FH * 2, T, 'plaster', [
+      wall('x', HX0, HZ1 - T / 2, lx, 0, FH * 2, T, 'concrete', [
         { at: 9.5, w: 1.4, y: 0, h: 2.4, frame: 'concrete' }, { ...gWin, at: 3.5 }, { ...uWin, at: 3 }, { ...uWin, at: 7.5 }, { ...uWin, at: 11.5 }], { plinth: 'concrete' });
-      wall('z', HX0 + T / 2, HZ0 + T, lz - 2 * T, 0, FH * 2, T, 'plaster', [{ ...gWin, at: 6 }, { ...uWin, at: 4.7 }], { plinth: 'concrete' });
-      wall('z', HX1 - T / 2, HZ0 + T, lz - 2 * T, 0, FH * 2, T, 'plaster', [{ at: 4.7, w: 1.4, y: 0, h: 2.4, frame: 'concrete' }, { ...uWin, at: 4.7 }], { plinth: 'concrete' });
+      wall('z', HX0 + T / 2, HZ0 + T, lz - 2 * T, 0, FH * 2, T, 'concrete', [{ ...gWin, at: 6 }, { ...uWin, at: 4.7 }], { plinth: 'concrete' });
+      wall('z', HX1 - T / 2, HZ0 + T, lz - 2 * T, 0, FH * 2, T, 'concrete', [{ at: 4.7, w: 1.4, y: 0, h: 2.4, frame: 'concrete' }, { ...uWin, at: 4.7 }], { plinth: 'concrete' });
       block(HX0 + T, -0.02, HZ0 + T, HX1 - T, 0.02, HZ1 - T, 'gtiles', { bevel: 0, collide: false });
       // first floor slab with a stairwell, interior stairs
       block(-5.4, FH - 0.2, HZ0 + T, HX1 - T, FH, HZ1 - T, 'floor', { bevel: 0 });
@@ -138,12 +138,12 @@ export const MAPS = [
       stairs(HX0 + T, HZ0 + T, -5.5, 0.2, 0, FH, '-z', 'concrete', { cheeks: null });
       rail(-5.35, HZ0 + T, -5.35, 0.2, FH);
       // internal partition with a doorway on the ground floor
-      wall('x', -1, -1.2, 6.7, 0, FH - 0.2, 0.2, 'plaster', [{ at: 2.2, w: 1.2, y: 0, h: 2.2, frame: 'concrete' }]);
+      wall('x', -1, -1.2, 6.7, 0, FH - 0.2, 0.2, 'concrete', [{ at: 2.2, w: 1.2, y: 0, h: 2.2, frame: 'concrete' }]);
       bulb(-1, FH - 0.3, 1.5); bulb(2, FH * 2 - 0.3, -2.5);
       // roof with parapet and a corrugated hut
       block(HX0, FH * 2 - 0.2, HZ0, HX1, FH * 2, HZ1, 'floor', { bevel: 0 });
       block(HX0 - 0.15, FH * 2 - 0.25, HZ0 - 0.15, HX1 + 0.15, FH * 2 - 0.03, HZ1 + 0.15, 'concrete', { bevel: 0.04, collide: false });
-      for (const [a, b, c, d] of [[HX0, HZ1 - 0.3, HX1, HZ1], [HX0, HZ0 + 0.3, HX0 + 0.3, HZ1 - 0.3], [HX0 + 4, HZ0, HX1, HZ0 + 0.3]]) block(a, FH * 2, b, c, FH * 2 + 0.8, d, 'plaster', { bevel: 0.04 });
+      for (const [a, b, c, d] of [[HX0, HZ1 - 0.3, HX1, HZ1], [HX0, HZ0 + 0.3, HX0 + 0.3, HZ1 - 0.3], [HX0 + 4, HZ0, HX1, HZ0 + 0.3]]) block(a, FH * 2, b, c, FH * 2 + 0.8, d, 'concrete', { bevel: 0.04 });
       shed(0.5, -5.6, 5.5, -1.6, FH * 2, 2.6, { door: 's', doorAt: 0.3 });
       // exterior steel stairs to the roof on the east face
       stairs(HX1 + 0.3, -4.5, HX1 + 1.9, 3.8, 0, FH * 2, '-z', 'plate', { cheeks: 'iron' });
