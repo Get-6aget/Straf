@@ -108,7 +108,7 @@ export function withSkyVis(mat) {
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>
         float sv = clamp(vSkyVis, 0.0, 1.0);
         float skyAO = sv * sv * (3.0 - 2.0 * sv);
-        reflectedLight.indirectDiffuse *= mix(0.08, 1.0, skyAO);
+        reflectedLight.indirectDiffuse *= mix(0.14, 1.0, skyAO);
         reflectedLight.indirectSpecular *= mix(0.03, 1.0, skyAO);
         reflectedLight.directDiffuse *= mix(0.55, 1.0, sv);`);
   };
