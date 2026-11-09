@@ -1,6 +1,6 @@
 const STR = {
   ru: {
-    title: 'ПЕРЕКАТ', subtitle: 'дуэли на маленьких аренах',
+    title: 'КРИВОСТРЕЛ', titleA: 'КРИВО', titleB: 'СТРЕЛ', subtitle: 'дуэли на маленьких аренах',
     play1v1: '1 на 1', play2v2: '2 на 2', playFfa: 'Каждый сам за себя', settings: 'Настройки', controls: 'Управление',
     difficulty: 'Боты', diff0: 'Лёгкие', diff1: 'Нормальные', diff2: 'Жёсткие', rounds: 'Раундов до победы',
     resume: 'Продолжить', toMenu: 'В меню', again: 'Реванш', back: 'Назад', paused: 'Пауза',
@@ -26,7 +26,7 @@ const STR = {
     mobileFire: 'ОГОНЬ', mobileAlt: 'ЛЕВ', mobileJump: 'ПРЫЖОК', mobileSlide: 'СЛАЙД', mobileSprint: 'БЕГ', mobilePick: 'ВЗЯТЬ', mobileThrow: 'БРОС',
   },
   en: {
-    title: 'PEREKAT', subtitle: 'duels in tiny arenas',
+    title: 'SCHANDTAT', titleA: 'SCHAND', titleB: 'TAT', subtitle: 'duels in tiny arenas',
     play1v1: '1 vs 1', play2v2: '2 vs 2', playFfa: 'Free for all', settings: 'Settings', controls: 'Controls',
     difficulty: 'Bots', diff0: 'Easy', diff1: 'Normal', diff2: 'Hard', rounds: 'Rounds to win',
     resume: 'Resume', toMenu: 'Main menu', again: 'Rematch', back: 'Back', paused: 'Paused',
