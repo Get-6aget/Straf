@@ -244,6 +244,7 @@ export class Game {
     this.combat.updatePickups(dt);
     for (const s of this.spawners) {
       s.pad.userData.ring.material.color.setHex(s.pickup ? 0x7dff6a : 0x2f4a2c);
+      s.pad.userData.beam.material.uniforms.on.value = s.pickup ? 1 : 0.15;
       if (!s.pickup && s.respawn > 0) {
         s.respawn -= dt;
         if (s.respawn <= 0) s.pickup = this.combat.spawnPickup(newWeaponInstance(this.pickWeapon()), s.pos, s);
@@ -381,13 +382,18 @@ export class Game {
     }
   }
 
+  // Crouch-walking is silent; upright walking and running stomp, louder with speed.
   footsteps(f, dt) {
     if (!f.alive) return;
-    const run = f.state === 'wallrun' || (f.onGround && f.state === 'normal');
+    const run = f.state === 'wallrun' || (f.onGround && f.state === 'normal' && !f.crouching);
     const hs = f.horizSpeed;
-    if (!run || hs < 2.5) return;
+    if (!run || hs < 1.5) { f.stepT = Math.min(f.stepT || 0, 0.3); return; }
     f.stepT = (f.stepT || 0) - dt * hs;
-    if (f.stepT <= 0) { f.stepT = 2.6; sfx('step', f.pos, f === this.player ? 0.45 : 0.9); }
+    if (f.stepT <= 0) {
+      f.stepT = f.sprinting ? 2.7 : 2.2;
+      const loud = Math.min(1.3, 0.55 + hs / 12);
+      sfx('step', f.pos, (f === this.player ? 0.6 : 1.1) * loud);
+    }
   }
 
   shake(pos, radius) {
