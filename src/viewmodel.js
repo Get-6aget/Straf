@@ -84,8 +84,8 @@ export class Viewmodel {
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.01, 10);
     this.root = new THREE.Group();
     this.scene.add(this.root);
-    this.scene.add(new THREE.HemisphereLight(0xd6dbc8, 0x3c402f, 0.45));
-    const key = new THREE.DirectionalLight(0xffe9cc, 0.7); key.position.set(0.6, 1.5, 0.8); this.scene.add(key);
+    this.scene.add(new THREE.HemisphereLight(0xd6dbc8, 0x4a4e3c, 1.25));
+    const key = new THREE.DirectionalLight(0xffe9cc, 1.1); key.position.set(0.6, 1.5, 0.8); this.scene.add(key);
     this.R = new Hand(1);
     this.L = new Hand(-1);
     this.root.add(this.R.root, this.L.root);
@@ -94,7 +94,9 @@ export class Viewmodel {
     this.lungeT = 0;
   }
 
-  setEnvironment(env) { this.scene.environment = env; this.scene.environmentIntensity = 0.7; }
+  // The sky env map in this second scene blows the frame out together with GTAO, so
+  // the viewmodel gets its ambient from a brighter hemisphere light instead.
+  setEnvironment() {}
 
   onFire(hand, kind, id) {
     const h = hand === 'L' ? this.L : this.R;
