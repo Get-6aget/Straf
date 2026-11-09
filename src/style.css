@@ -122,7 +122,7 @@ body { font-family: 'Trebuchet MS', 'Segoe UI', Tahoma, sans-serif; color: #e8ef
 .menu .left { width: min(400px, 92vw); }
 .menu .right { width: min(300px, 92vw); }
 .menu .player { position: absolute; right: 4vw; bottom: 4vh; width: 300px; }
-.logo { font-size: 66px; font-weight: 900; font-style: italic; line-height: .95; letter-spacing: -1px; color: #eef3e6;
+.logo { white-space: nowrap; font-size: 54px; font-weight: 900; font-style: italic; line-height: .95; letter-spacing: -1px; color: #eef3e6;
   background: linear-gradient(180deg, #ffffff 0%, #c9d6c2 45%, #7f9a86 50%, #e4eadc 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
   filter: drop-shadow(0 2px 0 rgba(0,0,0,.6)); }
 .logo span { background: linear-gradient(180deg, #d9ffcb 0%, #8dff6e 50%, #3f7a34 52%, #b9ff9e 100%); -webkit-background-clip: text; background-clip: text; }
