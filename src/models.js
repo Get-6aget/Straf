@@ -29,7 +29,35 @@ function weaponMat(code, paint) {
   return m;
 }
 
+const weaponAssets = new Map();
+// Load authored weapon GLBs (tools/blender/build_weapons.py); missing ones fall back to primitives.
+export async function loadWeaponAssets(ids) {
+  const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+  const loader = new GLTFLoader();
+  const base = import.meta.env.BASE_URL + 'assets/models/weapons/';
+  await Promise.all(ids.map(async (id) => {
+    try {
+      const g = await loader.loadAsync(base + id + '.glb');
+      g.scene.traverse((o) => {
+        if (o.isMesh) { o.castShadow = true; if (o.material) { o.material.metalness = Math.min(o.material.metalness ?? 0, 0.3); o.material.roughness = Math.max(o.material.roughness ?? 1, 0.7); } }
+      });
+      const muzzle = g.scene.getObjectByName('muzzle');
+      const gripL = g.scene.getObjectByName('grip_L');
+      weaponAssets.set(id, { scene: g.scene, muzzle: muzzle && muzzle.position.clone(), gripL: gripL && gripL.position.clone() });
+    } catch (e) { /* keep primitive fallback */ }
+  }));
+  return weaponAssets.size;
+}
+
+export function weaponAsset(id) { return weaponAssets.get(id) || null; }
+
 export function buildWeaponModel(id) {
+  const a = weaponAssets.get(id);
+  if (a) { const g = a.scene.clone(true); g.userData.authored = true; return g; }
+  return buildPrimitiveWeapon(id);
+}
+
+function buildPrimitiveWeapon(id) {
   const def = WEAPONS[id];
   const g = new THREE.Group();
   if (!def) return g;
