@@ -13,7 +13,19 @@ export const TEXTURE_SETS = {
   brick: 'brick_wall_10',
   grass: 'aerial_grass_rock',
   tiles: 'dirty_tiles',
+  blocks: 'large_sandstone_blocks_01',
+  stone: 'medieval_blocks_02',
+  corr: 'corrugated_iron_02',
+  slab: 'concrete_slab_wall',
+  panels: 'concrete_panels',
+  plaster: 'grey_plaster_02',
+  plate: 'metal_plate',
+  gtiles: 'large_grey_tiles',
 };
+
+// Only these sets are real metal; everything else is forced dielectric and rough
+// so overcast sky reflections don't make stone and concrete look wet or glossy.
+const METALLIC = new Set(['rust', 'paint', 'corr', 'plate']);
 
 const base = import.meta.env.BASE_URL + 'assets/';
 const texLoader = new THREE.TextureLoader();
@@ -43,14 +55,18 @@ export function textureSet(key) {
 
 const matCache = new Map();
 // World-space UVs are baked into geometry, so one material instance per (set, tint) is enough.
-export function pbr(key, { tint = 0xffffff, rough = 1, metal = null, normal = 1 } = {}) {
+export function pbr(key, { tint = 0xffffff, rough = null, metal = null, normal = 1 } = {}) {
   const k = `${key}|${tint}|${rough}|${metal}|${normal}`;
   if (matCache.has(k)) return matCache.get(k);
   const s = textureSet(key);
+  const isMetal = METALLIC.has(key);
+  if (metal === null) metal = isMetal ? 0.55 : 0;
+  // roughness multiplies the ARM map; >1 pushes glossy texels toward matte (the shader clamps to 1)
+  if (rough === null) rough = isMetal ? 1.15 : 1.8;
   const m = new THREE.MeshStandardMaterial({
     color: tint, map: s.map, normalMap: s.normalMap, normalScale: new THREE.Vector2(normal, normal),
     aoMap: s.arm, aoMapIntensity: 1, roughnessMap: s.arm, roughness: rough,
-    metalnessMap: metal === null ? s.arm : null, metalness: metal === null ? 1 : metal,
+    metalness: metal,
   });
   matCache.set(k, m);
   return m;

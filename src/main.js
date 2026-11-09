@@ -30,7 +30,7 @@ function screens() {
   uiRoot.innerHTML = `
   <div class="screen menu" id="s-menu">
     <div class="frame left">
-      <div class="logo">${t('title').slice(0, 4)}<span>${t('title').slice(4)}</span></div>
+      <div class="logo">${t('title').slice(0, t('titleCut'))}<span>${t('title').slice(t('titleCut'))}</span></div>
       <div class="sub">${t('subtitle')}</div>
       <button class="mbtn" data-mode="1v1">${t('play1v1')}</button>
       <button class="mbtn" data-mode="2v2">${t('play2v2')}</button>
