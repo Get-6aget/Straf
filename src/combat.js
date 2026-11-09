@@ -1,3 +1,4 @@
+import { Box3, Group, Vector3 } from 'three';
 import { WEAPONS, newWeaponInstance } from './weapons.js';
 import { buildProjectileMesh, buildWeaponModel } from './models.js';
 import { rayAABB } from './physics.js';
@@ -393,8 +394,14 @@ export class Combat {
   }
 
   spawnPickup(inst, pos, spawner) {
-    const mesh = buildWeaponModel(inst.id);
-    mesh.scale.setScalar(1.6);
+    const model = buildWeaponModel(inst.id);
+    model.scale.setScalar(1.6);
+    // spin around the model's visual centre, not its grip
+    model.updateMatrixWorld(true);
+    const c = new Box3().setFromObject(model).getCenter(new Vector3());
+    model.position.sub(c);
+    const mesh = new Group();
+    mesh.add(model);
     mesh.position.set(pos.x, pos.y + 0.55, pos.z);
     this.game.scene.add(mesh);
     const pk = { inst, pos: { ...pos }, mesh, spawner, t: Math.random() * 6 };
@@ -447,11 +454,13 @@ export class Combat {
     sfx('pickup', f.pos, f.isBot ? 0.5 : 0.8);
   }
 
+  // Weapons hover above their spawner and spin; dropped ones float lower.
   updatePickups(dt) {
     for (const pk of this.pickups) {
       pk.t += dt;
-      pk.mesh.rotation.y += dt * 1.4;
-      pk.mesh.position.y = pk.pos.y + 0.55 + Math.sin(pk.t * 2.2) * 0.06;
+      const base = pk.spawner ? 1.05 : 0.45;
+      pk.mesh.rotation.set(0, pk.mesh.rotation.y + dt * 1.8, 0.18 * Math.sin(pk.t * 1.3));
+      pk.mesh.position.y = pk.pos.y + base + Math.sin(pk.t * 2.4) * 0.12;
     }
   }
 
