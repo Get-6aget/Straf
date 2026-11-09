@@ -1,0 +1,21 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-chrome', args: ['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'] });
+const page = await (await browser.newContext({viewport:{width:1280,height:720}})).newPage();
+page.setDefaultTimeout(180000);
+await page.addInitScript(() => localStorage.setItem('perekat_settings_v2', JSON.stringify({ quality: 1 })));
+await page.goto('http://localhost:4174/?q=1');
+await page.waitForFunction(() => window.__game && window.__game.state !== 'idle');
+await page.click('[data-mode="1v1"]');
+await page.waitForTimeout(32000);
+const r = await page.evaluate(async()=>{
+  const { newWeaponInstance } = await import('/src/weapons.js');
+  const g = window.__game, p = g.player;
+  p.hands.R=null;p.hands.L=null;
+  g.combat.take(p, g.combat.spawnPickup(newWeaponInstance('pompa'), { x: p.pos.x, y: p.pos.y, z: p.pos.z }, null));
+  await new Promise(r=>setTimeout(r,1500));
+  const out=[];
+  g.vm.scene.traverse(o=>{ const bad=o.matrixWorld.elements.some(v=>!isFinite(v)); if(bad||o.isLight) out.push([o.type,o.name,bad,o.intensity]); });
+  return {out, ldr: g.vm.scene.environment?1:0, env:g.vm.scene.environmentIntensity};
+});
+console.log(JSON.stringify(r));
+await browser.close();
