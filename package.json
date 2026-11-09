@@ -1,5 +1,5 @@
 {
-  "name": "perekat-arena",
+  "name": "krivostrel-schandtat",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "zip": "npm run build && cd dist && zip -r ../perekat-yandex.zip . -x '*.map'"
+    "zip": "npm run build && cd dist && zip -r ../krivostrel-yandex.zip . -x '*.map'"
   },
   "dependencies": {
     "three": "0.187.0"
