@@ -4,6 +4,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { World } from './physics.js';
 import { pbr, textureSet } from './assets.js';
 import { LIGHTING } from './maps.js';
+import { OccupancyGrid, bakeVisibility, withSkyVis } from './bakeao.js';
 
 // Metres per texture repeat, chosen so bricks/blocks/planks read at real-world size.
 const TILE = {
@@ -181,8 +182,18 @@ export function buildSpawnerPad() {
   ring.rotation.x = Math.PI / 2; ring.position.y = 0.09;
   const disc = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24), new THREE.MeshBasicMaterial({ color: 0x5ee860, transparent: true, opacity: 0.25, depthWrite: false }));
   disc.rotation.x = -Math.PI / 2; disc.position.y = 0.085;
-  g.add(base, ring, disc);
+  // faint light column the floating weapon hangs in
+  const beamGeo = new THREE.CylinderGeometry(0.3, 0.44, 1.9, 24, 1, true);
+  beamGeo.translate(0, 0.95, 0);
+  const beam = new THREE.Mesh(beamGeo, new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    uniforms: { color: { value: new THREE.Color(0x6aff5a) }, on: { value: 1 } },
+    vertexShader: 'varying float vY; void main(){ vY = position.y / 1.9; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'uniform vec3 color; uniform float on; varying float vY; void main(){ gl_FragColor = vec4(color * pow(1.0 - vY, 2.2) * 0.32 * on, 1.0); }',
+  }));
+  g.add(base, ring, disc, beam);
   g.userData.ring = ring;
+  g.userData.beam = beam;
   return g;
 }
 
@@ -205,19 +216,24 @@ export function buildMapScene(def, data, quality, sky) {
     else worldUV(e.geo, TILE[e.mat] || 3);
     push(e.mat, e.geo);
   }
+  const grid = new OccupancyGrid(world);
+  const t0 = performance.now();
   for (const [m, geos] of Object.entries(byMat)) {
     const merged = mergeGeometries(geos);
     geos.forEach((g) => g.dispose());
     if (!merged) { console.warn('merge failed', m); continue; }
-    const mesh = new THREE.Mesh(merged, matFor(m));
+    bakeVisibility(merged, grid);
+    const mesh = new THREE.Mesh(merged, withSkyVis(matFor(m)));
     mesh.castShadow = quality > 0 && m !== 'dark';
     mesh.receiveShadow = quality > 0;
     group.add(mesh);
   }
+  group.userData.bakeMs = Math.round(performance.now() - t0);
   for (const d of data.decor) buildDecor(group, d);
 
-  // Overcast lighting: the HDR sky provides the soft fill, a weak diffuse key adds gentle shadows.
-  const hemi = new THREE.HemisphereLight(0xdfe6d8, 0x4a4a40, L.hemi);
+  // Overcast but directional: a strong key casts crisp shadows, sky fill is
+  // gated by the baked visibility so interiors and undersides stay dark.
+  const hemi = new THREE.HemisphereLight(0xdfe6d8, 0x3a3a32, L.hemi);
   group.add(hemi);
   const key = new THREE.DirectionalLight(L.sunColor, L.sun);
   const [sx, sy, sz] = L.sunDir;
@@ -226,11 +242,22 @@ export function buildMapScene(def, data, quality, sky) {
     key.castShadow = true;
     const s = key.shadow;
     s.mapSize.set(2048, 2048);
-    Object.assign(s.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 120 });
-    s.bias = -0.0004; s.normalBias = 0.04; s.radius = 6; s.blurSamples = 16;
-    s.intensity = 0.75;
+    Object.assign(s.camera, { left: -34, right: 34, top: 34, bottom: -34, near: 1, far: 130 });
+    s.bias = -0.0005; s.normalBias = 0.03; s.radius = 2.5;
+    s.intensity = 1;
   }
   group.add(key, key.target);
+
+  // Interior bulbs actually light their surroundings (no shadows, short range).
+  if (quality > 0) {
+    const bulbs = data.decor.filter((d) => d.t === 'bulb' || d.t === 'lamp').slice(0, 8);
+    for (const b of bulbs) {
+      const pl = new THREE.PointLight(0xffd59a, b.t === 'bulb' ? 5 : 7, b.t === 'bulb' ? 7 : 9, 2);
+      if (b.t === 'bulb') pl.position.set(b.x, b.y - 0.2, b.z);
+      else pl.position.set(b.x, (b.y || 0) + b.h - 0.4, b.z - 1.1);
+      group.add(pl);
+    }
+  }
 
   return {
     group, world,

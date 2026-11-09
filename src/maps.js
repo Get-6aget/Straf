@@ -6,7 +6,7 @@ import { createKit } from './kit.js';
 // corrugated sheds and props. Collision is boxes and ramps; visuals are not.
 //   W(x, y, z) weapon spawner, S(x, y, z) player spawn (snapped to the floor below)
 export const LIGHTING = {
-  overcast: { sky: 'overcast', envIntensity: 0.9, bgIntensity: 0.8, fog: 0x86907f, fogDensity: 0.012, sun: 2.1, sunColor: 0xeef0e0, sunDir: [0.55, 1, 0.35], hemi: 0.35, grade: [0.92, 1.0, 0.92] },
+  overcast: { sky: 'overcast', envIntensity: 0.75, bgIntensity: 0.8, fog: 0x86907f, fogDensity: 0.012, sun: 3.3, sunColor: 0xf2eedc, sunDir: [0.6, 0.85, 0.4], hemi: 0.3, grade: [0.92, 1.0, 0.92] },
 };
 
 export const MAPS = [
