@@ -5,11 +5,75 @@ import { World } from './physics.js';
 import { pbr, textureSet } from './assets.js';
 import { LIGHTING } from './maps.js';
 
-const TILE = { concrete: 3, floor: 3, moss: 2.5, cracked: 3, rust: 2, brick: 2.4, grass: 4, tiles: 1.5, wood: 2, paint: 2 };
-const MAT_OPTS = {
-  concrete: { tint: 0xb4b8aa }, floor: { tint: 0x9fa295 }, moss: { tint: 0xb8c0a8 }, cracked: { tint: 0x9a9c8e },
-  rust: { tint: 0xc0b0a0 }, brick: { tint: 0xffffff, metal: 0 }, grass: { tint: 0x9aa284, metal: 0 }, tiles: { tint: 0xc8c8c0 },
+// Metres per texture repeat, chosen so bricks/blocks/planks read at real-world size.
+const TILE = {
+  concrete: 3, floor: 3, moss: 2.5, cracked: 3, rust: 2, brick: 2.4, grass: 4, tiles: 1.5, wood: 2, paint: 2,
+  blocks: 3, stone: 3.2, corr: 2.2, slab: 4, panels: 4, plaster: 3, plate: 1.5, gtiles: 3,
+  iron: 1.2, woodDark: 1.6, corrRoof: 2.2, roof: 2.2,
 };
+
+// Material slots used by maps/kit. Each resolves to a cached photo-textured material.
+function matFor(key) {
+  switch (key) {
+    case 'concrete': return pbr('concrete', { tint: 0xb4b8aa });
+    case 'floor': return pbr('floor', { tint: 0xa6a89a });
+    case 'moss': return pbr('moss', { tint: 0xb8c0a8 });
+    case 'cracked': return pbr('cracked', { tint: 0xa2a496 });
+    case 'brick': return pbr('brick', { tint: 0xd8d0c8 });
+    case 'grass': return pbr('grass', { tint: 0x9aa284 });
+    case 'tiles': return pbr('tiles', { tint: 0xc8c8c0 });
+    case 'blocks': return pbr('blocks', { tint: 0xb6b8a6 });
+    case 'stone': return pbr('stone', { tint: 0xb4b6a6 });
+    case 'slab': return pbr('slab', { tint: 0xb0b4a6 });
+    case 'panels': return pbr('panels', { tint: 0xb4b6aa });
+    case 'plaster': return pbr('plaster', { tint: 0xc2c4b6 });
+    case 'gtiles': return pbr('gtiles', { tint: 0xb0b2a6 });
+    case 'plate': return pbr('plate', { tint: 0x9a968e });
+    case 'corr': return pbr('corr', { tint: 0xb8a898 });
+    case 'corrRoof': case 'roof': return pbr('corr', { tint: 0x9c8878 });
+    case 'rust': return pbr('rust', { tint: 0xc0b0a0 });
+    case 'iron': return pbr('rust', { tint: 0x6a605a, metal: 0.45 });
+    case 'paint': return pbr('paint', { tint: 0xffffff });
+    case 'wood': return pbr('wood', { tint: 0xc09a72 });
+    case 'woodDark': return pbr('wood', { tint: 0x6e5a46 });
+    case 'dark': return darkMat ||= new THREE.MeshStandardMaterial({ color: 0x0d0e0b, roughness: 1 });
+    case 'cable': return cableMat ||= new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.8 });
+    default: return pbr(key);
+  }
+}
+let darkMat = null, cableMat = null;
+
+// Box-projected UVs in world space keep texel density constant across all solids.
+function worldUV(geo, tile) {
+  const pos = geo.attributes.position, nor = geo.attributes.normal;
+  if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(pos.count * 2), 2));
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const ax = Math.abs(nor.getX(i)), ay = Math.abs(nor.getY(i)), az = Math.abs(nor.getZ(i));
+    if (ay >= ax && ay >= az) uv.setXY(i, x / tile, z / tile);
+    else if (ax >= az) uv.setXY(i, z / tile, y / tile);
+    else uv.setXY(i, x / tile, y / tile);
+  }
+  uv.needsUpdate = true;
+}
+
+// Cylindrical UVs around (cx, cz) for towers and drums; caps fall back to planar.
+function cylUV(geo, tile, cx, cz) {
+  const pos = geo.attributes.position, nor = geo.attributes.normal, uv = geo.attributes.uv;
+  for (let i = 0; i < pos.count; i += 3) {
+    // per-triangle so the atan2 seam doesn't smear across one face
+    const angs = [0, 1, 2].map((k) => Math.atan2(pos.getZ(i + k) - cz, pos.getX(i + k) - cx));
+    if (Math.max(...angs) - Math.min(...angs) > Math.PI) for (let k = 0; k < 3; k++) if (angs[k] < 0) angs[k] += Math.PI * 2;
+    for (let k = 0; k < 3; k++) {
+      const j = i + k, x = pos.getX(j), y = pos.getY(j), z = pos.getZ(j);
+      if (Math.abs(nor.getY(j)) > 0.7) { uv.setXY(j, x / tile, z / tile); continue; }
+      const r = Math.hypot(x - cx, z - cz);
+      uv.setXY(j, (angs[k] * r) / tile, y / tile);
+    }
+  }
+  uv.needsUpdate = true;
+}
 
 function solidGeometry(b, world) {
   const w = b.maxX - b.minX, h = b.maxY - b.minY, d = b.maxZ - b.minZ;
@@ -22,25 +86,11 @@ function solidGeometry(b, world) {
     }
     geo.computeVertexNormals();
   }
-  worldUV(geo, TILE[b.mat] || 3);
-  return geo;
+  return geo.toNonIndexed();
 }
 
-// Box-projected UVs in world space keep texel density constant across all solids.
-function worldUV(geo, tile) {
-  const pos = geo.attributes.position, nor = geo.attributes.normal, uv = geo.attributes.uv;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-    const ax = Math.abs(nor.getX(i)), ay = Math.abs(nor.getY(i)), az = Math.abs(nor.getZ(i));
-    if (ay >= ax && ay >= az) uv.setXY(i, x / tile, z / tile);
-    else if (ax >= az) uv.setXY(i, z / tile, y / tile);
-    else uv.setXY(i, x / tile, y / tile);
-  }
-  uv.needsUpdate = true;
-}
-
-const cyl = new THREE.CylinderGeometry(1, 1, 1, 16);
-const rbox = new RoundedBoxGeometry(1, 1, 1, 3, 0.1);
+const cyl = new THREE.CylinderGeometry(1, 1, 1, 18);
+const rbox = new RoundedBoxGeometry(1, 1, 1, 2, 0.1);
 
 function addMesh(group, geo, mat, sx, sy, sz, x, y, z, ry = 0, rx = 0, rz = 0) {
   const m = new THREE.Mesh(geo, mat);
@@ -51,61 +101,53 @@ function addMesh(group, geo, mat, sx, sy, sz, x, y, z, ry = 0, rx = 0, rz = 0) {
 }
 
 function buildDecor(group, d) {
-  const rust = pbr('rust', MAT_OPTS.rust);
+  const rust = matFor('rust');
   switch (d.t) {
-    case 'pipe': {
-      const r = d.r;
-      if (d.axis === 'y') addMesh(group, cyl, rust, r, d.len, r, d.x, d.y + d.len / 2, d.z);
-      else if (d.axis === 'x') addMesh(group, cyl, rust, r, d.len, r, d.x, d.y, d.z, 0, 0, Math.PI / 2);
-      else addMesh(group, cyl, rust, r, d.len, r, d.x, d.y, d.z, 0, Math.PI / 2);
-      // flanges
-      const n = Math.floor(d.len / 4);
-      for (let i = 0; i <= n; i++) {
-        const t = -d.len / 2 + (i * d.len) / Math.max(1, n);
-        if (d.axis === 'x') addMesh(group, cyl, rust, r * 1.35, 0.08, r * 1.35, d.x + t, d.y, d.z, 0, 0, Math.PI / 2);
-        else if (d.axis === 'z') addMesh(group, cyl, rust, r * 1.35, 0.08, r * 1.35, d.x, d.y, d.z + t, 0, Math.PI / 2);
-      }
-      break;
-    }
-    case 'rail': {
-      const alongX = Math.abs(d.x1 - d.x0) > Math.abs(d.z1 - d.z0);
-      const len = alongX ? Math.abs(d.x1 - d.x0) : Math.abs(d.z1 - d.z0);
-      const cx = (d.x0 + d.x1) / 2, cz = (d.z0 + d.z1) / 2;
-      for (const hy of [0.5, 1.0]) addMesh(group, cyl, rust, 0.03, len, 0.03, cx, d.y + hy, cz, 0, alongX ? 0 : Math.PI / 2, alongX ? Math.PI / 2 : 0);
-      const posts = Math.max(1, Math.round(len / 1.6));
-      for (let i = 0; i <= posts; i++) {
-        const t = -len / 2 + (i * len) / posts;
-        addMesh(group, cyl, rust, 0.035, 1.05, 0.035, alongX ? cx + t : cx, d.y + 0.52, alongX ? cz : cz + t);
-      }
-      break;
-    }
     case 'barrel': {
-      const paint = pbr('rust', { tint: [0x7a9a6a, 0xc06a4a, 0x6a8aa0][Math.floor(d.rot) % 3] });
+      const paint = pbr('paint', { tint: [0x7a8a6a, 0xb06a4a, 0x6a7a8a][Math.floor(d.rot) % 3] });
       addMesh(group, cyl, paint, 0.3, 0.88, 0.3, d.x, d.y + 0.44, d.z, d.rot);
-      for (const hy of [0.18, 0.7]) addMesh(group, cyl, rust, 0.31, 0.04, 0.31, d.x, d.y + hy, d.z);
-      break;
-    }
-    case 'car': {
-      const g = new THREE.Group();
-      const body = new THREE.MeshStandardMaterial({ color: 0x8c9182, roughness: 0.55, metalness: 0.35, normalMap: textureSet('rust').normalMap, normalScale: new THREE.Vector2(0.6, 0.6) });
-      const dark = new THREE.MeshStandardMaterial({ color: 0x1e1f1d, roughness: 0.6 });
-      const glass = new THREE.MeshStandardMaterial({ color: 0x2a3330, roughness: 0.15, metalness: 0.3 });
-      addMesh(g, rbox, body, 1.8, 0.6, 4.1, 0, 0.55, 0);
-      addMesh(g, rbox, body, 1.65, 0.55, 2.1, 0, 1.08, 0.2);
-      addMesh(g, rbox, glass, 1.5, 0.42, 2.0, 0, 1.1, 0.2);
-      for (const [x, z] of [[-0.85, 1.3], [0.85, 1.3], [-0.85, -1.3], [0.85, -1.3]]) addMesh(g, cyl, dark, 0.32, 0.22, 0.32, x, 0.3, z, 0, 0, Math.PI / 2);
-      g.position.set(d.x, -0.08, d.z); g.rotation.set(0.03, d.rot, -0.05);
-      group.add(g);
+      for (const hy of [0.02, 0.3, 0.6, 0.87]) addMesh(group, cyl, rust, 0.312, 0.035, 0.312, d.x, d.y + hy, d.z);
+      addMesh(group, cyl, matFor('iron'), 0.04, 0.03, 0.04, d.x + 0.15, d.y + 0.89, d.z + 0.08);
       break;
     }
     case 'lamp': {
-      const dark = pbr('rust', { tint: 0x7a7470 });
-      addMesh(group, cyl, dark, 0.07, 4.6, 0.07, d.x, 2.3, d.z);
-      addMesh(group, cyl, dark, 0.04, 1.2, 0.04, d.x, 4.5, d.z - 0.5, 0, Math.PI / 2);
-      addMesh(group, rbox, dark, 0.4, 0.15, 0.6, d.x, 4.45, d.z - 1.05);
+      const dark = matFor('iron');
+      const h = d.h;
+      addMesh(group, cyl, dark, 0.11, 0.5, 0.11, d.x, d.y + 0.25, d.z);
+      addMesh(group, cyl, dark, 0.06, h, 0.05, d.x, d.y + h / 2, d.z);
+      addMesh(group, cyl, dark, 0.035, 1.2, 0.035, d.x, d.y + h - 0.1, d.z - 0.55, 0, Math.PI / 2 - 0.15);
+      addMesh(group, rbox, dark, 0.34, 0.14, 0.55, d.x, d.y + h - 0.05, d.z - 1.1);
       const bulb = new THREE.Mesh(rbox, new THREE.MeshBasicMaterial({ color: 0xfff1cc }));
-      bulb.scale.set(0.3, 0.05, 0.45); bulb.position.set(d.x, 4.36, d.z - 1.05);
+      bulb.scale.set(0.26, 0.04, 0.42); bulb.position.set(d.x, d.y + h - 0.13, d.z - 1.1);
       group.add(bulb);
+      break;
+    }
+    case 'bulb': {
+      const dark = matFor('iron');
+      addMesh(group, cyl, dark, 0.02, 0.3, 0.02, d.x, d.y + 0.15, d.z);
+      addMesh(group, cyl, dark, 0.16, 0.08, 0.16, d.x, d.y, d.z);
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffe2a8 }));
+      b.position.set(d.x, d.y - 0.07, d.z); group.add(b);
+      break;
+    }
+    case 'statue': {
+      // stylised bald figure, same silhouette family as the player characters
+      const m = matFor('plaster');
+      const g = new THREE.Group();
+      const sph = new THREE.SphereGeometry(1, 20, 14);
+      const cap = new THREE.CapsuleGeometry(1, 1, 6, 14);
+      addMesh(g, sph, m, 0.2, 0.23, 0.21, 0, 1.62, 0);
+      addMesh(g, cyl, m, 0.06, 0.12, 0.06, 0, 1.4, 0);
+      addMesh(g, cap, m, 0.19, 0.2, 0.13, 0, 1.12, 0);
+      addMesh(g, cap, m, 0.17, 0.08, 0.12, 0, 0.84, 0);
+      for (const s of [-1, 1]) {
+        addMesh(g, cap, m, 0.06, 0.22, 0.06, s * 0.26, 1.08, 0, 0, 0, s * 0.12);
+        addMesh(g, cap, m, 0.05, 0.2, 0.05, s * 0.3, 0.75, -0.04, 0, 0.15, 0);
+        addMesh(g, cap, m, 0.08, 0.3, 0.08, s * 0.1, 0.52, 0);
+        addMesh(g, cap, m, 0.065, 0.28, 0.065, s * 0.1, 0.18, s > 0 ? 0.05 : -0.02);
+      }
+      g.position.set(d.x, d.y, d.z); g.rotation.y = d.rot;
+      group.add(g);
       break;
     }
     default: break;
@@ -131,16 +173,25 @@ export function buildMapScene(def, data, quality, sky) {
   const world = new World();
   world.killY = def.killY ?? -25;
   const byMat = {};
+  const push = (mat, geo) => (byMat[mat] ||= []).push(geo);
   for (const b of data.solids) {
     const wb = world.add(b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ, b.type, b.ramp || null);
     if (b.mat === 'none') continue;
-    (byMat[b.mat] ||= []).push(solidGeometry(wb, world));
+    const geo = solidGeometry(wb, world);
+    worldUV(geo, TILE[b.mat] || 3);
+    push(b.mat, geo);
+  }
+  for (const e of data.geos) {
+    if (e.uv === 'cyl') cylUV(e.geo, TILE[e.mat] || 3, e.cx, e.cz);
+    else worldUV(e.geo, TILE[e.mat] || 3);
+    push(e.mat, e.geo);
   }
   for (const [m, geos] of Object.entries(byMat)) {
     const merged = mergeGeometries(geos);
     geos.forEach((g) => g.dispose());
-    const mesh = new THREE.Mesh(merged, pbr(m, MAT_OPTS[m] || {}));
-    mesh.castShadow = quality > 0;
+    if (!merged) { console.warn('merge failed', m); continue; }
+    const mesh = new THREE.Mesh(merged, matFor(m));
+    mesh.castShadow = quality > 0 && m !== 'dark';
     mesh.receiveShadow = quality > 0;
     group.add(mesh);
   }

@@ -5,36 +5,65 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { buildWeaponModel } from './models.js';
 import { clothTexture } from './assets.js';
 import { WEAPONS } from './weapons.js';
+import { buildGlove, buildArm, gloveMat } from './gunparts.js';
 
-const rbox = new RoundedBoxGeometry(1, 1, 1, 2, 0.3);
-const cap = new THREE.CapsuleGeometry(1, 1, 4, 10);
-const cyl = new THREE.CylinderGeometry(1, 0.8, 1, 10);
+// Glove rigs: each pose is a right hand + sleeve; the left side is the same rig mirrored.
+// wrist/dir place the forearm so it leaves the screen through the bottom edge.
+const VM_SCALE = 1.45;
+const RIGS = {
+  grip: { glove: 'grip', pos: [0, 0.015, 0.01], rx: -0.28, wrist: [0.036, -0.03, 0.05], dir: [0.3, -0.5, 0.85] },
+  under: { glove: 'under', pos: [0, 0, 0], rx: 0, wrist: [0.04, -0.04, 0.06], dir: [0.6, -0.3, 0.75] },
+  handle: { glove: 'grip', pos: [0, 0, 0.08], rx: -Math.PI / 2, wrist: [0.03, -0.085, 0.0], dir: [0.35, -0.85, -0.35] },
+};
 
 // One first-person hand holding an optional weapon.
 class Hand {
-  constructor(side, sleeveMat, gloveMat) {
+  constructor(side, sleeveMat) {
     this.side = side; // 1 right, -1 left
+    this.sleeveMat = sleeveMat;
     this.root = new THREE.Group();
-    this.arm = new THREE.Group();
-    // forearm angles down and back so it leaves the screen through the bottom edge
-    const fore = new THREE.Mesh(cyl, sleeveMat); fore.scale.set(0.038, 0.42, 0.038); fore.rotation.x = Math.PI / 2 - 0.75; fore.position.set(0, -0.15, 0.17);
-    const glove = new THREE.Mesh(rbox, gloveMat); glove.scale.set(0.075, 0.045, 0.1); glove.position.set(0, -0.03, 0.02);
-    this.arm.add(fore, glove);
-    this.root.add(this.arm);
+    this.body = new THREE.Group();
+    this.body.scale.x = side;
+    this.holder = new THREE.Group();
+    this.body.add(this.holder);
+    this.root.add(this.body);
+    this.rigs = {};
+    this.pose = null;
     this.id = undefined;
     this.model = null;
     this.recoil = 0; this.swing = 0; this.swap = 1; this.throwT = 0;
   }
 
+  setPose(pose, pos) {
+    if (pose !== this.pose) {
+      if (this.pose) this.rigs[this.pose].visible = false;
+      this.pose = pose;
+      if (!this.rigs[pose]) {
+        const spec = RIGS[pose];
+        const rig = new THREE.Group();
+        const glove = new THREE.Mesh(buildGlove(spec.glove), gloveMat);
+        glove.castShadow = true;
+        const arm = buildArm(this.sleeveMat, 0.8);
+        arm.position.set(...spec.wrist);
+        arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...spec.dir).normalize());
+        rig.add(glove, arm);
+        rig.rotation.x = spec.rx;
+        this.holder.add(rig);
+        this.rigs[pose] = rig;
+      }
+      this.rigs[pose].visible = true;
+    }
+    this.rigs[pose].position.set(...(pos || RIGS[pose].pos));
+  }
+
   set(id) {
     if (id === this.id) return;
-    if (this.model) this.root.remove(this.model);
+    if (this.model) this.holder.remove(this.model);
     this.model = id ? buildWeaponModel(id) : null;
-    if (this.model) { this.model.scale.setScalar(WEAPONS[id].hands === 2 ? 0.6 : 0.7); this.root.add(this.model); }
+    if (this.model) this.holder.add(this.model);
     this.id = id;
     this.swap = 0;
   }
@@ -43,13 +72,14 @@ class Hand {
 export class Viewmodel {
   constructor() {
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(58, 1, 0.01, 10);
+    this.camera = new THREE.PerspectiveCamera(60, 1, 0.01, 10);
     this.root = new THREE.Group();
     this.scene.add(this.root);
-    const sleeve = new THREE.MeshStandardMaterial({ color: 0x5e5a50, map: clothTexture(), roughness: 0.95 });
-    const glove = new THREE.MeshStandardMaterial({ color: 0x6b5a44, roughness: 0.75 });
-    this.R = new Hand(1, sleeve, glove);
-    this.L = new Hand(-1, sleeve, glove);
+    this.scene.add(new THREE.HemisphereLight(0xdde4d0, 0x4a4f3e, 0.9));
+    const key = new THREE.DirectionalLight(0xfff1dc, 1.0); key.position.set(0.6, 1.5, 0.8); this.scene.add(key);
+    const sleeve = new THREE.MeshStandardMaterial({ color: 0xe4dcc6, map: clothTexture(), roughness: 0.95 });
+    this.R = new Hand(1, sleeve);
+    this.L = new Hand(-1, sleeve);
     this.root.add(this.R.root, this.L.root);
     this.t = 0; this.bob = 0;
     this.sway = { x: 0, y: 0 };
@@ -96,38 +126,43 @@ export class Viewmodel {
     this.root.position.set(gx, gy, 0);
     this.root.rotation.set(gpitch, 0, groll);
 
+    const support = twoH && !Lw ? R.def.fore : null;
     for (const h of [this.R, this.L]) {
       h.recoil = Math.max(0, h.recoil - dt * 6);
       h.swing = Math.max(0, h.swing - dt * 3.2);
       h.swap = Math.min(1, h.swap + dt * 4);
       h.throwT = Math.max(0, h.throwT - dt);
-      const w = h === this.R ? R : Lw;
+      const isSupport = h === this.L && !!support;
+      // the support hand rides on the right-hand weapon's frame
+      const src = isSupport ? this.R : h;
+      const w = src === this.R ? R : Lw;
       const def = w ? w.def : null;
-      // left hand supports a two-handed gun, otherwise mirrors the right
-      const visible = h === this.R || !!Lw;
-      h.root.visible = visible || (twoH && h === this.L);
-      let x = 0.2 * h.side, y = -0.2, z = -0.42, rx = 0, ry = 0, rz = 0;
-      if (!w) { x = 0.2 * h.side; y = -0.27; z = -0.42; rx = 0.25; }
-      if (twoH && h === this.L) {
-        // support hand under the front of a two-handed gun
-        x = 0.18; y = -0.2; z = -0.64; rx = 0.2; ry = 0.25;
-        if (zoomed) { x = 0.0; y = -0.18; z = -0.62; }
+      h.root.visible = h === this.R || !!Lw || isSupport;
+      const melee = !!def && def.kind === 'melee';
+      if (isSupport) h.setPose(support[3], [support[0], support[1], support[2]]);
+      else h.setPose(melee ? 'handle' : 'grip');
+      const s = src.side;
+      const big = def && def.hands === 2;
+      let x = 0.23 * s, y = -0.24, z = -0.44, rx = 0.03, ry = 0.2 * s, rz = 0;
+      if (big) { x = 0.23 * s; y = -0.26; z = -0.33; rx = 0.08; ry = 0.22 * s; }
+      if (!def) { y = -0.3; z = -0.42; rx = 0.25; ry = 0; }
+      if (melee) { x = 0.2 * s; y = -0.1; z = -0.5; ry = 0.1 * s; }
+      let sc = VM_SCALE * (def && !big && !melee && def.kind === 'hitscan' ? 0.85 : 1);
+      if (def && def.view) { x = def.view[0] * s; y = def.view[1]; z = def.view[2]; ry = def.view[3] * s; rx = def.view[4]; if (def.view[5]) sc *= def.view[5]; }
+      if (zoomed && R && h.root.visible) { x = 0; y = -0.15; z = -0.3; ry = 0; }
+      z += src.recoil * 0.09; rx += src.recoil * 0.2;
+      y -= (1 - src.swap) * 0.4; rx -= (1 - src.swap) * 0.6;
+      if (src.throwT > 0) { const k = Math.sin((1 - src.throwT / 0.3) * Math.PI); z -= k * 0.3; rx -= k * 0.9; y += k * 0.1; }
+      if (src.swing > 0 && (!def || melee)) {
+        const k = Math.sin(src.swing * Math.PI);
+        if (def) { rz -= k * 1.3 * s; rx -= k * 0.5; x -= k * 0.18 * s; }
+        else { z -= k * 0.3; x -= k * 0.08 * s; }
       }
-      if (zoomed && h === this.R) { x = 0; y = -0.15; z = -0.36; }
-      if (def && def.hands === 2 && h === this.R) { y -= 0.02; z += 0.04; }
-      z += h.recoil * 0.07; rx += h.recoil * 0.2;
-      y -= (1 - h.swap) * 0.4; rx -= (1 - h.swap) * 0.6;
-      if (h.throwT > 0) { const k = Math.sin((1 - h.throwT / 0.3) * Math.PI); z -= k * 0.3; rx -= k * 0.9; y += k * 0.1; }
-      if (h.swing > 0 && (!def || def.kind === 'melee')) {
-        const k = Math.sin(h.swing * Math.PI);
-        if (def) { rz -= k * 1.3 * h.side; rx -= k * 0.5; x -= k * 0.18 * h.side; }
-        else { z -= k * 0.3; x -= k * 0.08 * h.side; }
-      }
-      if (this.lungeT > 0 && h === this.R) { rx = -1.1; z -= 0.15; }
+      if (this.lungeT > 0 && src === this.R) { rx = -1.1; z -= 0.15; }
       h.root.position.set(x, y, z);
       h.root.rotation.set(rx, ry, rz);
-      if (h.model && def && def.kind === 'melee') { h.model.rotation.set(0.5, 0, 0); h.model.position.set(0, 0.02, 0); }
-      else if (h.model) { h.model.rotation.set(0, 0, 0); h.model.position.set(0, 0, 0); }
+      h.holder.rotation.set(melee ? 0.6 : 0, 0, 0);
+      h.root.scale.setScalar(sc);
     }
     this.root.visible = !(zoomed && R.def.scope);
   }
