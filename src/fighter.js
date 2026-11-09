@@ -306,6 +306,12 @@ export class Fighter {
     let best = null, bestD = 1e9;
     for (const b of boxes) {
       if (b.ramp) continue;
+      if (b.cyl) {
+        const dx = p.x - b.x, dz = p.z - b.z, d = Math.hypot(dx, dz);
+        const gap = d - b.r - K.RADIUS;
+        if (gap < reach && gap < bestD && d > 1e-6) { bestD = gap; best = { x: dx / d, z: dz / d }; }
+        continue;
+      }
       const c = [[b.minX - p.x, -1, 0], [p.x - b.maxX, 1, 0], [b.minZ - p.z, 0, -1], [p.z - b.maxZ, 0, 1]];
       for (const [d, nx, nz] of c) if (d >= -0.05 && d < bestD) { bestD = d; best = { x: nx, z: nz }; }
     }
@@ -373,6 +379,18 @@ export class Fighter {
       const stepH = b.maxY - p.y;
       if ((wasGround || this.onGround) && !b.ramp && stepH > 0 && stepH <= K.STEP_H && this.aabbFree(world, p.x, b.maxY + 0.001, p.z, this.height)) {
         p.y = b.maxY + 0.001;
+        continue;
+      }
+      if (b.cyl) {
+        // push the footprint rectangle out of the circle along the contact normal
+        const qx = Math.max(p.x - R, Math.min(p.x + R, b.x)), qz = Math.max(p.z - R, Math.min(p.z + R, b.z));
+        let nx = qx - b.x, nz = qz - b.z, dist = Math.hypot(nx, nz);
+        if (dist < 1e-6) { nx = p.x - b.x; nz = p.z - b.z; dist = Math.hypot(nx, nz) || 1; }
+        nx /= dist; nz /= dist;
+        const pen = b.r - Math.hypot(qx - b.x, qz - b.z) + 0.002;
+        p.x -= -nx * pen; p.z -= -nz * pen;
+        const vn = this.vel.x * nx + this.vel.z * nz;
+        if (vn < 0) { this.vel.x -= nx * vn; this.vel.z -= nz * vn; }
         continue;
       }
       if (axis === 0) { p.x = d > 0 ? b.minX - R - 0.001 : b.maxX + R + 0.001; this.vel.x = 0; }
