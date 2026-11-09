@@ -77,7 +77,7 @@ export class CharacterModel {
       const w = id ? buildWeaponModel(id) : null;
       if (w) {
         const bx = new THREE.Box3().setFromObject(w);
-        w.userData.fore = new THREE.Vector3(0, bx.min.y + (bx.max.y - bx.min.y) * 0.4, bx.min.z * 0.38);
+        w.userData.fore = new THREE.Vector3(0, bx.min.y + (bx.max.y - bx.min.y) * 0.4, bx.min.z * 0.55);
         w.rotation.x = -Math.PI / 2; w.scale.setScalar(1.2); hand.add(w);
       }
       this['weapon' + side] = w; this['id' + side] = id;
