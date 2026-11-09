@@ -1,0 +1,25 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const page = await (await browser.newContext({ viewport: { width: 900, height: 700 } })).newPage();
+page.setDefaultTimeout(180000);
+page.on('pageerror', (e) => console.log('pageerror', e.message));
+await page.goto('http://localhost:4175/?q=2');
+await page.waitForFunction(() => window.__game && window.__game.state !== 'idle');
+await page.click('[data-mode="1v1"]');
+await page.waitForTimeout(3000);
+console.log(await page.evaluate(() => {
+  const g = window.__game, f = g.fighters[1], m = f.model;
+  g.__u = g.update; g.update = () => {};
+  g.player.alive = false; g.spectateDelay = -1; g.spectateTarget = f; g.specYaw = -2.2;
+  for (const o of g.fighters.slice(2)) o.model.root.visible = false;
+  let bad = 0; const geo = m.body.children.find((c) => c.isSkinnedMesh).geometry;
+  for (const a of ['position', 'normal', 'uv', 'skinWeight']) for (const v of geo.attributes[a].array) if (!isFinite(v)) bad++;
+  m.root.visible = false;
+  return JSON.stringify({ bad, verts: geo.attributes.position.count, tris: geo.index.count / 3, cam: g.camera.position });
+}));
+await page.waitForTimeout(1500);
+await page.screenshot({ path: '/tmp/dbg_hidden.png' });
+await page.evaluate(() => { window.__game.fighters[1].model.root.visible = true; });
+await page.waitForTimeout(1500);
+await page.screenshot({ path: '/tmp/dbg_vis.png' });
+await browser.close();
