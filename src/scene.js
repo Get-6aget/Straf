@@ -181,8 +181,18 @@ export function buildSpawnerPad() {
   ring.rotation.x = Math.PI / 2; ring.position.y = 0.09;
   const disc = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24), new THREE.MeshBasicMaterial({ color: 0x5ee860, transparent: true, opacity: 0.25, depthWrite: false }));
   disc.rotation.x = -Math.PI / 2; disc.position.y = 0.085;
-  g.add(base, ring, disc);
+  // faint light column the floating weapon hangs in
+  const beamGeo = new THREE.CylinderGeometry(0.3, 0.44, 1.9, 24, 1, true);
+  beamGeo.translate(0, 0.95, 0);
+  const beam = new THREE.Mesh(beamGeo, new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    uniforms: { color: { value: new THREE.Color(0x6aff5a) }, on: { value: 1 } },
+    vertexShader: 'varying float vY; void main(){ vY = position.y / 1.9; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'uniform vec3 color; uniform float on; varying float vY; void main(){ gl_FragColor = vec4(color * pow(1.0 - vY, 2.2) * 0.32 * on, 1.0); }',
+  }));
+  g.add(base, ring, disc, beam);
   g.userData.ring = ring;
+  g.userData.beam = beam;
   return g;
 }
 
