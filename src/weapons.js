@@ -38,7 +38,7 @@ export const WEAPONS = {
   hlopushka: {
     name: { ru: 'Хлопушка', en: 'Popper' }, hands: 2, kind: 'projectile', ammo: 4, interval: 0.6, damage: 250, recoil: 0.08, sound: 'rocket', paint: 0x55663f, weight: 5,
     projectile: { speed: 30, gravity: 0, radius: 0.15, explode: 3.6, life: 6, mesh: 'rocket' },
-    fore: [0, 0, -0.3, 'grip'], view: [0.36, -0.4, -0.35, 0.5, 0.1, 0.78],
+    fore: [0.05, -0.03, -0.28, 'grip'], view: [0.2, -0.13, -0.55, 0.25, 0.05, 0.65],
   },
   tesak: {
     name: { ru: 'Тесак', en: 'Cleaver' }, hands: 1, kind: 'melee', ammo: Infinity, interval: 0.4, damage: 50, lungeDamage: 100, range: 2.3, arc: 0.6,
@@ -47,7 +47,7 @@ export const WEAPONS = {
   klinok: {
     name: { ru: 'Клинок', en: 'Blade' }, hands: 2, kind: 'melee', ammo: Infinity, interval: 0.7, damage: 50, lungeDamage: 100, range: 2.8, arc: 0.55,
     alt: 'lunge', sound: 'slash', paint: 0x2b2b2b, weight: 4, speed: 1.15, jump: 1.2, wallJumps: 3,
-    fore: [0, 0, 0.17, 'handle'],
+    fore: [0.04, -0.01, 0.2, 'handle'],
   },
   limonka: {
     view: [0.2, -0.17, -0.45, 0.1, 0.0],
