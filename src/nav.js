@@ -29,7 +29,7 @@ export class NavGraph {
         const x = minX + (ix + 0.5) * CELL, z = minZ + (iz + 0.5) * CELL;
         const tops = [];
         for (const b of w.boxes) {
-          if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) tops.push(b);
+          if (w.containsXZ(b, x, z)) tops.push(b);
         }
         const list = [];
         for (const b of tops) {
