@@ -1,0 +1,17 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const page = await (await browser.newContext({ viewport: { width: 600, height: 400 } })).newPage();
+page.setDefaultTimeout(180000);
+page.on('pageerror', (e) => console.log('pageerror', e.message));
+await page.goto('http://localhost:4175/?q=2');
+await page.waitForFunction(() => window.__game && window.__game.state !== 'idle');
+await page.click('[data-mode="1v1"]');
+await page.waitForTimeout(3000);
+await page.evaluate(() => { const g = window.__game; g.__u = g.update; g.update = () => {}; });
+await page.waitForTimeout(1500);
+await page.screenshot({ path: '/tmp/dbg_a.png' });
+await page.evaluate(() => { const g = window.__game; g.player.alive = false; g.spectateDelay = -1; g.spectateTarget = g.fighters[1]; });
+await page.waitForTimeout(1500);
+await page.screenshot({ path: '/tmp/dbg_b.png' });
+console.log(await page.evaluate(() => { const g = window.__game; return JSON.stringify({ st: g.state, fx: g.fx, cam: g.camera.position, f: g.fighters[1].pos }); }));
+await browser.close();
