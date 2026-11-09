@@ -8,26 +8,45 @@ import { LIGHTING } from './maps.js';
 // Metres per texture repeat, chosen so bricks/blocks/planks read at real-world size.
 const TILE = {
   concrete: 3, floor: 3, moss: 2.5, cracked: 3, rust: 2, brick: 2.4, grass: 4, tiles: 1.5, wood: 2, paint: 2,
-  blocks: 3, stone: 3.2, corr: 2.2, slab: 4, panels: 4, plaster: 3, plate: 1.5, gtiles: 3,
+  blocks: 3, stone: 4.2, corr: 2.2, slab: 4, panels: 4, plaster: 3, plate: 1.5, gtiles: 3,
   iron: 1.2, woodDark: 1.6, corrRoof: 2.2, roof: 2.2,
 };
+
+// Mean sRGB albedo of each photo set (measured), used to pull every surface toward
+// one muted olive-grey palette so mixed sources don't clash (bright orange stone, black floors).
+const MEAN = {
+  concrete: [141, 133, 112], floor: [86, 86, 84], cracked: [187, 174, 155], blocks: [146, 133, 104], stone: [172, 135, 106],
+  slab: [170, 163, 155], panels: [151, 131, 111], plaster: [142, 129, 108], gtiles: [132, 126, 115], brick: [68, 53, 47], tiles: [68, 34, 16],
+};
+const normCache = new Map();
+function normalized(key, target) {
+  const k = key + target;
+  if (normCache.has(k)) return normCache.get(k);
+  const m = pbr(key, { tint: 0xffffff }).clone();
+  const mean = MEAN[key];
+  const lin = (v) => Math.pow(v / 255, 2.2);
+  m.color.setRGB(...[0, 1, 2].map((i) => Math.min(3, lin(target[i]) / lin(mean[i]))));
+  normCache.set(k, m);
+  return m;
+}
+const WALL = [128, 130, 118], GROUND = [112, 114, 104], WARM = [134, 128, 112];
 
 // Material slots used by maps/kit. Each resolves to a cached photo-textured material.
 function matFor(key) {
   switch (key) {
-    case 'concrete': return pbr('concrete', { tint: 0xb4b8aa });
-    case 'floor': return pbr('floor', { tint: 0xa6a89a });
+    case 'concrete': return normalized('concrete', WALL);
+    case 'floor': return normalized('floor', [98, 100, 92]);
     case 'moss': return pbr('moss', { tint: 0xb8c0a8 });
-    case 'cracked': return pbr('cracked', { tint: 0xa2a496 });
-    case 'brick': return pbr('brick', { tint: 0xd8d0c8 });
+    case 'cracked': return normalized('cracked', GROUND);
+    case 'brick': return normalized('brick', [120, 100, 88]);
     case 'grass': return pbr('grass', { tint: 0x9aa284 });
-    case 'tiles': return pbr('tiles', { tint: 0xc8c8c0 });
-    case 'blocks': return pbr('blocks', { tint: 0xb6b8a6 });
-    case 'stone': return pbr('stone', { tint: 0xb4b6a6 });
-    case 'slab': return pbr('slab', { tint: 0xb0b4a6 });
-    case 'panels': return pbr('panels', { tint: 0xb4b6aa });
-    case 'plaster': return pbr('plaster', { tint: 0xc2c4b6 });
-    case 'gtiles': return pbr('gtiles', { tint: 0xb0b2a6 });
+    case 'tiles': return normalized('tiles', [120, 112, 100]);
+    case 'blocks': return normalized('blocks', WARM);
+    case 'stone': return normalized('stone', [120, 120, 106]);
+    case 'slab': return normalized('slab', WALL);
+    case 'panels': return normalized('panels', [124, 124, 114]);
+    case 'plaster': return normalized('plaster', [146, 146, 132]);
+    case 'gtiles': return normalized('gtiles', GROUND);
     case 'plate': return pbr('plate', { tint: 0x9a968e });
     case 'corr': return pbr('corr', { tint: 0xb8a898 });
     case 'corrRoof': case 'roof': return pbr('corr', { tint: 0x9c8878 });
@@ -206,7 +225,7 @@ export function buildMapScene(def, data, quality, sky) {
   if (quality > 0) {
     key.castShadow = true;
     const s = key.shadow;
-    s.mapSize.set(quality > 1 ? 4096 : 2048, quality > 1 ? 4096 : 2048);
+    s.mapSize.set(2048, 2048);
     Object.assign(s.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 120 });
     s.bias = -0.0004; s.normalBias = 0.04; s.radius = 6; s.blurSamples = 16;
     s.intensity = 0.75;

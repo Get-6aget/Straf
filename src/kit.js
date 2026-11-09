@@ -187,7 +187,7 @@ export function createKit({ solids, geos, decor, rng }) {
   // win: { w, h, rows: [y...], n (per 10 m) }, faces: which sides get windows
   function building(x0, z0, x1, z1, y0, h, mat, { win = null, trim = 'concrete', roof = 'floor', parapet = 0.9, cornice = true, faces = 'nsew', doors = {} } = {}) {
     const t = 0.35;
-    block(x0 + t * 0.5, y0, z0 + t * 0.5, x1 - t * 0.5, y0 + h, z1 - t * 0.5, 'dark', { bevel: 0, collide: false });
+    block(x0 + t * 0.5, y0, z0 + t * 0.5, x1 - t * 0.5, y0 + h - 0.32, z1 - t * 0.5, 'dark', { bevel: 0, collide: false });
     solid(x0, y0, z0, x1, y0 + h, z1);
     const lx = x1 - x0, lz = z1 - z0;
     const mk = (len, side) => {
