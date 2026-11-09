@@ -165,7 +165,7 @@ export class Post {
     this.composer.addPass(this.main);
     this.gtao = new GTAOPass(scene, camera, 4, 4);
     this.gtao.output = GTAOPass.OUTPUT.Default;
-    this.gtao.blendIntensity = 0.85;
+    this.gtao.blendIntensity = 0.5;
     this.gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.4, thickness: 1, scale: 1.1, samples: 12 });
     this.composer.addPass(this.gtao);
     this.vmPass = new RenderPass(vm.scene, vm.camera);
@@ -180,7 +180,7 @@ export class Post {
   }
 
   setQuality(q) {
-    this.gtao.enabled = q >= 1;
+    this.gtao.enabled = q >= 2; // the level already has baked AO
     this.bloom.enabled = q >= 1;
   }
 
