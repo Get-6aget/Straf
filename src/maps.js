@@ -96,7 +96,7 @@ export const MAPS = [
     weapons: ['kochegar', 'strizh', 'pompa', 'otboinik', 'hlopushka', 'shilo', 'limonka', 'tesak', 'zhuravl'],
     build(k, { W, S }) {
       const { block, wall, row, building, tower, stairs, walkway, rail, shed, crate, barrel, pipe, cable, pole, lamp, bulb } = k;
-      block(-24, -1, -20, 24, 0, 20, 'cracked', { bevel: 0 });
+      block(-24, -1, -20, 24, 0, 20, 'floor', { bevel: 0 });
       block(-14, 0, 8, -4, 0.03, 15, 'grass', { bevel: 0, collide: false });
       block(10, 0, 8, 17, 0.03, 12, 'grass', { bevel: 0, collide: false });
       // kerbs around the grass
@@ -151,7 +151,7 @@ export const MAPS = [
       rail(HX1 + 1.95, -4.5, HX1 + 1.95, 3.8, FH * 2 * 0.0 + 0.05, { collide: false });
 
       // --- silo, pipes and a shed in the east yard ---
-      tower(17, 14.5, 3, 0, 11, 'concrete', { bands: [3, 7], top: 'flat', trim: 'concrete', windows: [{ angle: Math.PI, y: 1.0, w: 0.9, h: 1.6 }] });
+      tower(17, 14.5, 3, 0, 11, 'slab', { bands: [3, 7], top: 'flat', trim: 'concrete', windows: [{ angle: Math.PI, y: 1.0, w: 0.9, h: 1.6 }] });
       pipe([[17, 9, 11.5], [17, 9, 7], [24, 9, 7]], 0.22);
       pipe([[14, 0, 14.5], [14, 1.2, 14.5], [9, 1.2, 14.5], [9, 1.2, 19.6]], 0.14);
       pipe([[-23.5, 0.2, -10], [-23.5, 11.5, -10]], 0.12);

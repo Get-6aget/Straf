@@ -6,6 +6,7 @@ const browser = await chromium.launch({ executablePath: '/usr/local/bin/google-c
 const page = await (await browser.newContext({ viewport: { width: 640, height: 360 } })).newPage();
 page.setDefaultTimeout(180000);
 await page.addInitScript(() => localStorage.setItem('perekat_settings_v2', JSON.stringify({ quality: 0 })));
+page.on('response', (r) => { if (r.status() >= 400) console.log('HTTP', r.status(), r.url()); });
 await page.goto(url);
 await page.waitForFunction(() => window.__game && window.__game.state !== 'idle', null, { timeout: 120000 });
 const res = await page.evaluate(async () => {
