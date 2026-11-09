@@ -1,4 +1,5 @@
-// All sound is synthesised at runtime with WebAudio: no audio files ship.
+// Sound effects are CC0 samples (docs/CREDITS.md) decoded into WebAudio buffers;
+// the synth table below is the fallback while a sample loads or if it fails.
 let ctx = null, master, sfxBus, musicBus, noiseBuf;
 const listener = { x: 0, y: 0, z: 0, yaw: 0 };
 let volumes = { sfx: 0.8, music: 0.5 };
@@ -19,6 +20,7 @@ export function initAudio() {
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   applyVolumes();
+  loadSamples();
   return ctx;
 }
 
@@ -123,11 +125,66 @@ const SOUNDS = {
   spin: (d, t) => { tone(d, t, 0.25, { type: 'sawtooth', f0: 60, f1: 200, vol: 0.12 }); },
 };
 
+// name -> number of variations (public/assets/sfx/<name>_<n>.mp3)
+const SAMPLE_COUNTS = {
+  step: 5, land: 3, jump: 3, slide: 3, whoosh: 3, walljump: 2,
+  pistol: 3, revolver: 3, heavy: 3, smg: 3, rifle: 3, shotgun: 3, sniper: 3, rocket: 2,
+  explosion: 3, boom: 2, slash: 3, throw: 2, punch: 3,
+  empty: 1, pickup: 2, hit: 3, headshot: 1, kill: 1, hurt: 2,
+  beep: 1, go: 1, win: 1, lose: 1, click: 1,
+};
+const PITCH_JITTER = { step: 0.1, land: 0.08, hit: 0.06, smg: 0.03, shotgun: 0.03 };
+const samples = {}; // name -> AudioBuffer[]
+const lastPick = {};
+let samplesStarted = false;
+const sampleStats = { total: 0, loaded: 0, failed: 0 };
+
+export function getSampleStats() { return { ...sampleStats, names: Object.keys(samples).length }; }
+
+function loadSamples() {
+  if (samplesStarted) return;
+  samplesStarted = true;
+  const base = import.meta.env.BASE_URL + 'assets/sfx/';
+  const jobs = [];
+  for (const [name, n] of Object.entries(SAMPLE_COUNTS)) for (let i = 1; i <= n; i++) jobs.push([name, i]);
+  sampleStats.total = jobs.length;
+  let next = 0;
+  const worker = async () => {
+    while (next < jobs.length) {
+      const [name, i] = jobs[next++];
+      try {
+        const res = await fetch(`${base}${name}_${i}.mp3`);
+        if (!res.ok) throw new Error(res.status);
+        const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+        (samples[name] ||= []).push(buf);
+        sampleStats.loaded++;
+      } catch (e) { sampleStats.failed++; }
+    }
+  };
+  for (let k = 0; k < 4; k++) worker();
+}
+
+function playSample(name, d) {
+  const list = samples[name];
+  if (!list || !list.length) return false;
+  let i = Math.floor(Math.random() * list.length);
+  if (list.length > 1 && i === lastPick[name]) i = (i + 1) % list.length;
+  lastPick[name] = i;
+  const src = ctx.createBufferSource();
+  src.buffer = list[i];
+  const j = PITCH_JITTER[name] ?? 0.04;
+  src.playbackRate.value = 1 + (Math.random() * 2 - 1) * j;
+  src.connect(d);
+  src.onended = () => d.disconnect();
+  src.start();
+  return true;
+}
+
 export function sfx(name, pos = null, vol = 1) {
   if (!ctx || muted) return;
   const fn = SOUNDS[name];
-  if (!fn) return;
+  if (!fn && !SAMPLE_COUNTS[name]) return;
   const d = out(pos, vol);
   if (!d) return;
-  fn(d, ctx.currentTime);
+  if (!playSample(name, d) && fn) fn(d, ctx.currentTime);
 }
