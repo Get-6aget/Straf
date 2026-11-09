@@ -9,6 +9,7 @@ import { Game } from './game.js';
 import { Music } from './music.js';
 import { initAudio, setVolumes, setMuted } from './audio.js';
 import { loadSky, preloadAll, setAnisotropy } from './assets.js';
+import { MAPS, loadLevel } from './level.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const canvas = $('#c');
@@ -22,7 +23,7 @@ let lastMode = '1v1';
 let returnTo = 's-menu';
 
 function showLoading(pct) {
-  uiRoot.innerHTML = `<div class="screen loading on"><div class="logo">ПЕРЕ<span>КАТ</span></div><div class="loadbar"><div style="width:${pct}%"></div></div><div class="loadtxt">${t('loading')}…</div></div>`;
+  uiRoot.innerHTML = `<div class="screen loading on"><div class="logo">${t('titleA')}<span>${t('titleB')}</span></div><div class="loadbar"><div style="width:${pct}%"></div></div><div class="loadtxt">${t('loading')}…</div></div>`;
 }
 
 function screens() {
@@ -30,7 +31,7 @@ function screens() {
   uiRoot.innerHTML = `
   <div class="screen menu" id="s-menu">
     <div class="frame left">
-      <div class="logo">${t('title').slice(0, 4)}<span>${t('title').slice(4)}</span></div>
+      <div class="logo">${t('titleA')}<span>${t('titleB')}</span></div>
       <div class="sub">${t('subtitle')}</div>
       <button class="mbtn" data-mode="1v1">${t('play1v1')}</button>
       <button class="mbtn" data-mode="2v2">${t('play2v2')}</button>
@@ -211,12 +212,13 @@ async function boot() {
   renderer.shadowMap.type = THREE.VSMShadowMap;
   setAnisotropy(renderer);
 
-  const [sky] = await Promise.all([loadSky(renderer), preloadAll()]);
+  const [sky, ...lvls] = await Promise.all([loadSky(renderer), ...MAPS.map((d) => loadLevel(d, renderer)), preloadAll()]);
+  const levels = new Map(MAPS.map((d, i) => [d.id, lvls[i]]));
   showLoading(90);
 
   hud = new Hud($('#hud'));
   music = new Music();
-  game = new Game(renderer, hud, music, sky);
+  game = new Game(renderer, hud, music, sky, levels);
   input = new Input(canvas);
   if (isMobile) input.enableTouch($('#touch'));
   game.onMatchEnd = onMatchEnd;
