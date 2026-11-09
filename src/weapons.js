@@ -23,22 +23,22 @@ export const WEAPONS = {
   kochegar: {
     name: { ru: 'Кочегар', en: 'Stoker' }, hands: 2, kind: 'hitscan', auto: true, ammo: 30, interval: 0.1, damage: 25, head: 4, spread: 0.018, range: 160,
     recoil: 0.016, alt: 'zoom', zoom: 0.62, sound: 'rifle', paint: 0x3f4a3a, weight: 9,
-    fore: [0, 0.035, -0.3, 'under'],
+    fore: [0.05, 0.045, -0.24, 'under'],
   },
   pompa: {
     name: { ru: 'Помпа', en: 'Pump' }, hands: 2, kind: 'hitscan', ammo: 5, interval: 0.85, damage: 25, pellets: 8, head: 1.5, spread: 0.07, range: 40,
     recoil: 0.07, selfPush: 2, sound: 'shotgun', paint: 0x8a3d24, weight: 9,
-    fore: [0, 0.05, -0.3, 'under'],
+    fore: [0.05, 0.05, -0.24, 'under'],
   },
   zhuravl: {
     name: { ru: 'Журавль', en: 'Crane' }, hands: 2, kind: 'hitscan', ammo: 6, interval: 1.3, damage: 250, head: 2, spread: 0.07, scopedSpread: 0.0004, range: 400,
     recoil: 0.12, alt: 'zoom', zoom: 0.27, scope: true, sound: 'sniper', paint: 0x5b4a33, weight: 5, speed: 0.92,
-    fore: [0, 0.045, -0.3, 'under'],
+    fore: [0.05, 0.045, -0.24, 'under'],
   },
   hlopushka: {
     name: { ru: 'Хлопушка', en: 'Popper' }, hands: 2, kind: 'projectile', ammo: 4, interval: 0.6, damage: 250, recoil: 0.08, sound: 'rocket', paint: 0x55663f, weight: 5,
     projectile: { speed: 30, gravity: 0, radius: 0.15, explode: 3.6, life: 6, mesh: 'rocket' },
-    fore: [0, 0, -0.3, 'grip'], view: [0.36, -0.4, -0.35, 0.5, 0.1, 0.78],
+    fore: [0.05, -0.03, -0.28, 'grip'], view: [0.2, -0.13, -0.55, 0.25, 0.05, 0.65],
   },
   tesak: {
     name: { ru: 'Тесак', en: 'Cleaver' }, hands: 1, kind: 'melee', ammo: Infinity, interval: 0.4, damage: 50, lungeDamage: 100, range: 2.3, arc: 0.6,
@@ -47,7 +47,7 @@ export const WEAPONS = {
   klinok: {
     name: { ru: 'Клинок', en: 'Blade' }, hands: 2, kind: 'melee', ammo: Infinity, interval: 0.7, damage: 50, lungeDamage: 100, range: 2.8, arc: 0.55,
     alt: 'lunge', sound: 'slash', paint: 0x2b2b2b, weight: 4, speed: 1.15, jump: 1.2, wallJumps: 3,
-    fore: [0, 0, 0.17, 'handle'],
+    fore: [0.04, -0.01, 0.2, 'handle'], view: [0.17, 0.03, -0.5, 0.1, 0.0, 0.85],
   },
   limonka: {
     view: [0.2, -0.17, -0.45, 0.1, 0.0],
