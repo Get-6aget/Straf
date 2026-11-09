@@ -208,7 +208,7 @@ async function boot() {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.92;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.VSMShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   setAnisotropy(renderer);
 
   const [sky] = await Promise.all([loadSky(renderer), preloadAll()]);

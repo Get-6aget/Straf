@@ -102,7 +102,8 @@ const SOUNDS = {
   empty: (d, t) => { tone(d, t, 0.04, { type: 'square', f0: 1200, vol: 0.15 }); },
   jump: (d, t) => { noise(d, t, 0.1, { freq: 700, vol: 0.25 }); },
   land: (d, t) => { noise(d, t, 0.12, { freq: 400, vol: 0.45 }); tone(d, t, 0.08, { f0: 90, f1: 50, vol: 0.3 }); },
-  step: (d, t) => { noise(d, t, 0.06, { freq: 600 + Math.random() * 300, vol: 0.18 }); },
+  // boot on concrete: low thud + gritty scuff
+  step: (d, t) => { tone(d, t, 0.07, { f0: 110 + Math.random() * 30, f1: 55, vol: 0.55 }); noise(d, t, 0.09, { freq: 900 + Math.random() * 500, freqEnd: 300, vol: 0.4 }); noise(d, t + 0.025, 0.05, { type: 'bandpass', freq: 3200 + Math.random() * 800, q: 1.2, vol: 0.12 }); },
   slide: (d, t) => { noise(d, t, 0.7, { type: 'bandpass', freq: 1200, freqEnd: 400, q: 0.8, vol: 0.45, attack: 0.03 }); },
   heavy: (d, t) => { noise(d, t, 0.4, { freq: 2000, freqEnd: 180, vol: 1.1 }); tone(d, t, 0.3, { type: 'sawtooth', f0: 120, f1: 35, vol: 0.7 }); },
   whoosh: (d, t) => { noise(d, t, 0.3, { type: 'bandpass', freq: 600, freqEnd: 2200, q: 1.2, vol: 0.35, attack: 0.05 }); },
