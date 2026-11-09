@@ -1,0 +1,19 @@
+{
+  "name": "perekat-arena",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "zip": "npm run build && cd dist && zip -r ../perekat-yandex.zip . -x '*.map'"
+  },
+  "dependencies": {
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.65.0",
+    "vite": "8.3.6"
+  }
+}
