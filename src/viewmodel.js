@@ -6,13 +6,41 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { buildWeaponModel } from './models.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { buildWeaponModel, weaponAsset } from './models.js';
 import { clothTexture } from './assets.js';
 import { WEAPONS } from './weapons.js';
 
 const rbox = new RoundedBoxGeometry(1, 1, 1, 2, 0.3);
-const cap = new THREE.CapsuleGeometry(1, 1, 4, 10);
 const cyl = new THREE.CylinderGeometry(1, 0.8, 1, 10);
+
+// First-person arms from tools/blender/build_weapons.py (arm_R, arm_L; origin = grip).
+let arms = null;
+export async function loadArmsAsset() {
+  try {
+    const g = await new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'assets/models/fp_arms.glb');
+    arms = { R: g.scene.getObjectByName('arm_R'), L: g.scene.getObjectByName('arm_L') };
+    if (!arms.R || !arms.L) arms = null;
+  } catch (e) { arms = null; }
+  return !!arms;
+}
+
+function fallbackArm(sleeveMat, gloveMat) {
+  const a = new THREE.Group();
+  // forearm angles down and back so it leaves the screen through the bottom edge
+  const fore = new THREE.Mesh(cyl, sleeveMat); fore.scale.set(0.038, 0.42, 0.038); fore.rotation.x = Math.PI / 2 - 0.75; fore.position.set(0, -0.15, 0.17);
+  const glove = new THREE.Mesh(rbox, gloveMat); glove.scale.set(0.075, 0.045, 0.1); glove.position.set(0, -0.03, 0.02);
+  a.add(fore, glove);
+  return a;
+}
+
+function cloneArm(src, mirror) {
+  const a = src.clone(true);
+  a.position.set(0, 0, 0);
+  a.rotation.set(0, 0, 0);
+  if (mirror) a.scale.x = -1;
+  return a;
+}
 
 // One first-person hand holding an optional weapon.
 class Hand {
@@ -20,25 +48,40 @@ class Hand {
     this.side = side; // 1 right, -1 left
     this.root = new THREE.Group();
     this.arm = new THREE.Group();
-    // forearm angles down and back so it leaves the screen through the bottom edge
-    const fore = new THREE.Mesh(cyl, sleeveMat); fore.scale.set(0.038, 0.42, 0.038); fore.rotation.x = Math.PI / 2 - 0.75; fore.position.set(0, -0.15, 0.17);
-    const glove = new THREE.Mesh(rbox, gloveMat); glove.scale.set(0.075, 0.045, 0.1); glove.position.set(0, -0.03, 0.02);
-    this.arm.add(fore, glove);
     this.root.add(this.arm);
+    this.sleeveMat = sleeveMat; this.gloveMat = gloveMat;
+    this.armKind = null;
     this.id = undefined;
     this.model = null;
     this.recoil = 0; this.swing = 0; this.swap = 1; this.throwT = 0;
+  }
+
+  // kind: 'grip' (hand around a vertical grip) or 'fore' (left hand under a foregrip)
+  setArm(kind) {
+    if (kind === this.armKind) return;
+    this.arm.clear();
+    if (!arms) this.arm.add(fallbackArm(this.sleeveMat, this.gloveMat));
+    else if (kind === 'fore') this.arm.add(cloneArm(arms.L, false));
+    else this.arm.add(cloneArm(arms.R, this.side < 0));
+    this.armKind = kind;
   }
 
   set(id) {
     if (id === this.id) return;
     if (this.model) this.root.remove(this.model);
     this.model = id ? buildWeaponModel(id) : null;
-    if (this.model) { this.model.scale.setScalar(WEAPONS[id].hands === 2 ? 0.6 : 0.7); this.root.add(this.model); }
+    if (this.model) {
+      const authored = !!this.model.userData.authored;
+      if (!authored) this.model.scale.setScalar(WEAPONS[id].hands === 2 ? 0.6 : 0.7);
+      if (authored && this.side < 0) this.model.scale.x = -1;
+      this.root.add(this.model);
+    }
     this.id = id;
     this.swap = 0;
   }
 }
+
+const tmpM = new THREE.Matrix4(), tmpV = new THREE.Vector3(), tmpQ = new THREE.Quaternion();
 
 export class Viewmodel {
   constructor() {
@@ -46,6 +89,10 @@ export class Viewmodel {
     this.camera = new THREE.PerspectiveCamera(58, 1, 0.01, 10);
     this.root = new THREE.Group();
     this.scene.add(this.root);
+    this.hemi = new THREE.HemisphereLight(0xdfe6d6, 0x4a4c40, 0.9);
+    this.sun = new THREE.DirectionalLight(0xf2eedc, 1.2);
+    this.sun.position.set(0.5, 1, 0.3);
+    this.scene.add(this.hemi, this.sun);
     const sleeve = new THREE.MeshStandardMaterial({ color: 0x5e5a50, map: clothTexture(), roughness: 0.95 });
     const glove = new THREE.MeshStandardMaterial({ color: 0x6b5a44, roughness: 0.75 });
     this.R = new Hand(1, sleeve, glove);
@@ -54,9 +101,18 @@ export class Viewmodel {
     this.t = 0; this.bob = 0;
     this.sway = { x: 0, y: 0 };
     this.lungeT = 0;
+    this.light = 1;
   }
 
-  setEnvironment(env) { this.scene.environment = env; this.scene.environmentIntensity = 0.9; }
+  setEnvironment(env) { this.scene.environment = env; this.scene.environmentIntensity = 0.55; }
+
+  // match the brightness of where the player stands (covered vs open sky)
+  setLight(v) {
+    this.light += (v - this.light) * 0.2;
+    this.hemi.intensity = 0.9 * this.light;
+    this.sun.intensity = 1.2 * this.light * this.light;
+    this.scene.environmentIntensity = 0.55 * this.light;
+  }
 
   onFire(hand, kind, id) {
     const h = hand === 'L' ? this.L : this.R;
@@ -74,6 +130,8 @@ export class Viewmodel {
     const twoH = R && R.def.hands === 2;
     this.R.set(R ? R.id : null);
     this.L.set(Lw ? Lw.id : null);
+    this.R.setArm('grip');
+    this.L.setArm(twoH ? 'fore' : 'grip');
     this.t += dt;
     const hs = f.horizSpeed;
     const moving = f.onGround && f.state === 'normal' && hs > 1;
@@ -85,7 +143,7 @@ export class Viewmodel {
     const zoomed = R && R.zoomed;
 
     // shared body motion
-    let gx = this.sway.x + Math.cos(this.bob) * 0.016 * ba;
+    const gx = this.sway.x + Math.cos(this.bob) * 0.016 * ba;
     let gy = this.sway.y - Math.abs(Math.sin(this.bob)) * 0.02 * ba + Math.sin(this.t * 1.5) * 0.003;
     let groll = 0, gpitch = 0;
     if (f.sprinting && moving && !zoomed) { groll += 0.25; gpitch -= 0.18; gy -= 0.03; }
@@ -103,18 +161,11 @@ export class Viewmodel {
       h.throwT = Math.max(0, h.throwT - dt);
       const w = h === this.R ? R : Lw;
       const def = w ? w.def : null;
-      // left hand supports a two-handed gun, otherwise mirrors the right
-      const visible = h === this.R || !!Lw;
-      h.root.visible = visible || (twoH && h === this.L);
-      let x = 0.2 * h.side, y = -0.2, z = -0.42, rx = 0, ry = 0, rz = 0;
-      if (!w) { x = 0.2 * h.side; y = -0.27; z = -0.42; rx = 0.25; }
-      if (twoH && h === this.L) {
-        // support hand under the front of a two-handed gun
-        x = 0.18; y = -0.2; z = -0.64; rx = 0.2; ry = 0.25;
-        if (zoomed) { x = 0.0; y = -0.18; z = -0.62; }
-      }
-      if (zoomed && h === this.R) { x = 0; y = -0.15; z = -0.36; }
-      if (def && def.hands === 2 && h === this.R) { y -= 0.02; z += 0.04; }
+      h.root.visible = h === this.R || !!Lw || twoH;
+      let x = 0.19 * h.side, y = -0.2, z = -0.4, rx = 0, ry = 0, rz = 0;
+      if (!w) { y = -0.27; rx = 0.25; }
+      if (def && def.hands === 2) { x = 0.15; y = -0.19; z = -0.3; ry = 0.04; }
+      if (zoomed && h === this.R) { x = 0; y = -0.135; z = -0.26; ry = 0; }
       z += h.recoil * 0.07; rx += h.recoil * 0.2;
       y -= (1 - h.swap) * 0.4; rx -= (1 - h.swap) * 0.6;
       if (h.throwT > 0) { const k = Math.sin((1 - h.throwT / 0.3) * Math.PI); z -= k * 0.3; rx -= k * 0.9; y += k * 0.1; }
@@ -126,8 +177,18 @@ export class Viewmodel {
       if (this.lungeT > 0 && h === this.R) { rx = -1.1; z -= 0.15; }
       h.root.position.set(x, y, z);
       h.root.rotation.set(rx, ry, rz);
-      if (h.model && def && def.kind === 'melee') { h.model.rotation.set(0.5, 0, 0); h.model.position.set(0, 0.02, 0); }
-      else if (h.model) { h.model.rotation.set(0, 0, 0); h.model.position.set(0, 0, 0); }
+      if (h.model && def && def.kind === 'melee' && !h.model.userData.authored) { h.model.rotation.set(0.5, 0, 0); h.model.position.set(0, 0.02, 0); }
+    }
+    // support hand follows the gun's foregrip
+    if (twoH) {
+      const a = weaponAsset(R.id);
+      const grip = a && a.gripL ? a.gripL : new THREE.Vector3(0, -0.02, -0.3);
+      this.R.root.updateMatrix();
+      tmpV.copy(grip).applyMatrix4(this.R.root.matrix);
+      this.L.root.position.copy(tmpV);
+      tmpM.extractRotation(this.R.root.matrix);
+      tmpQ.setFromRotationMatrix(tmpM);
+      this.L.root.quaternion.copy(tmpQ);
     }
     this.root.visible = !(zoomed && R.def.scope);
   }
@@ -165,7 +226,7 @@ export class Post {
     this.composer.addPass(this.main);
     this.gtao = new GTAOPass(scene, camera, 4, 4);
     this.gtao.output = GTAOPass.OUTPUT.Default;
-    this.gtao.blendIntensity = 0.85;
+    this.gtao.blendIntensity = 0.5;
     this.gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.4, thickness: 1, scale: 1.1, samples: 12 });
     this.composer.addPass(this.gtao);
     this.vmPass = new RenderPass(vm.scene, vm.camera);
@@ -180,7 +241,7 @@ export class Post {
   }
 
   setQuality(q) {
-    this.gtao.enabled = q >= 1;
+    this.gtao.enabled = q >= 2; // the level already has baked AO
     this.bloom.enabled = q >= 1;
   }
 
