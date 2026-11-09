@@ -6,24 +6,24 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { buildWeaponModel } from './models.js';
-import { clothTexture } from './assets.js';
 import { WEAPONS } from './weapons.js';
-import { buildGlove, buildArm, gloveMat } from './gunparts.js';
+import { buildFPArm } from './fparms.js';
 
-// Glove rigs: each pose is a right hand + sleeve; the left side is the same rig mirrored.
-// wrist/dir place the forearm so it leaves the screen through the bottom edge.
+// Arm rigs: the skinned arm is built for a right hand (rest: palm down, fingers -Z); the left side is the same rig mirrored.
+// rot rolls/aims the hand in weapon space, fore bends the forearm at the wrist so it leaves the screen through the bottom.
 const VM_SCALE = 1.45;
-const RIGS = {
-  grip: { glove: 'grip', pos: [0, 0.015, 0.01], rx: -0.28, wrist: [0.036, -0.03, 0.05], dir: [0.3, -0.5, 0.85] },
-  under: { glove: 'under', pos: [0, 0, 0], rx: 0, wrist: [0.04, -0.04, 0.06], dir: [0.6, -0.3, 0.75] },
-  handle: { glove: 'grip', pos: [0, 0, 0.08], rx: -Math.PI / 2, wrist: [0.03, -0.085, 0.0], dir: [0.35, -0.85, -0.35] },
+export const RIGS = {
+  grip: { pose: 'grip', pos: [0.054, -0.035, 0.026], rot: [0, 0, -Math.PI / 2], fore: [-0.32, 0.53, 0] },
+  fist: { pose: 'fist', pos: [0.054, -0.035, 0.026], rot: [0.45, 0, -Math.PI / 2], fore: [-0.32, 0.53, 0] },
+  under: { pose: 'under', pos: [0.05, 0.045, -0.3], basis: [[0, 1, 0], [0, 0, -1], [-1, 0, 0]], fore: [-0.5, -0.8, 0] },
+  // handle: wrap axis along Z (hammer grip), forearm hanging down from the hand
+  handle: { pose: 'handle', pos: [0.04, -0.01, 0.07], basis: [[0, 1, 0], [0, 0, -1], [-1, 0, 0]], fore: [-0.15, -0.7, 0] },
 };
 
 // One first-person hand holding an optional weapon.
 class Hand {
-  constructor(side, sleeveMat) {
+  constructor(side) {
     this.side = side; // 1 right, -1 left
-    this.sleeveMat = sleeveMat;
     this.root = new THREE.Group();
     this.body = new THREE.Group();
     this.body.scale.x = side;
@@ -39,24 +39,33 @@ class Hand {
 
   setPose(pose, pos) {
     if (pose !== this.pose) {
-      if (this.pose) this.rigs[this.pose].visible = false;
+      if (this.pose) this.rigs[this.pose].group.visible = false;
       this.pose = pose;
       if (!this.rigs[pose]) {
         const spec = RIGS[pose];
-        const rig = new THREE.Group();
-        const glove = new THREE.Mesh(buildGlove(spec.glove), gloveMat);
-        glove.castShadow = true;
-        const arm = buildArm(this.sleeveMat, 0.8);
-        arm.position.set(...spec.wrist);
-        arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...spec.dir).normalize());
-        rig.add(glove, arm);
-        rig.rotation.x = spec.rx;
-        this.holder.add(rig);
-        this.rigs[pose] = rig;
+        const arm = buildFPArm(spec.pose);
+        const group = new THREE.Group();
+        group.add(arm.mesh);
+        if (spec.basis) { const b = spec.basis; group.quaternion.setFromRotationMatrix(new THREE.Matrix4().set(b[0][0], b[0][1], b[0][2], 0, b[1][0], b[1][1], b[1][2], 0, b[2][0], b[2][1], b[2][2], 0, 0, 0, 0, 1)); } else group.rotation.set(...spec.rot);
+        this.holder.add(group);
+        this.rigs[pose] = { group, arm, spec };
       }
-      this.rigs[pose].visible = true;
+      this.rigs[pose].group.visible = true;
     }
-    this.rigs[pose].position.set(...(pos || RIGS[pose].pos));
+    const r = this.rigs[pose];
+    r.group.position.set(...(pos || r.spec.pos));
+    if (!r.spec.basis) r.group.rotation.set(...r.spec.rot);
+    r.arm.pose(r.spec.pose, Math.min(1, this.recoil));
+    this.curRig = r;
+  }
+
+  // Point the forearm from the wrist toward an off-screen elbow spot (viewmodel-root space).
+  aimFore(vmRoot, target) {
+    const r = this.curRig;
+    if (!r) return;
+    vmRoot.updateMatrixWorld(true);
+    const t = r.arm.mesh.worldToLocal(vmRoot.localToWorld(new THREE.Vector3(...target)));
+    r.arm.by('fore').quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), t.sub(new THREE.Vector3(0, 0, 0.05)).normalize());
   }
 
   set(id) {
@@ -75,18 +84,17 @@ export class Viewmodel {
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.01, 10);
     this.root = new THREE.Group();
     this.scene.add(this.root);
-    this.scene.add(new THREE.HemisphereLight(0xdde4d0, 0x4a4f3e, 0.9));
-    const key = new THREE.DirectionalLight(0xfff1dc, 1.0); key.position.set(0.6, 1.5, 0.8); this.scene.add(key);
-    const sleeve = new THREE.MeshStandardMaterial({ color: 0xe4dcc6, map: clothTexture(), roughness: 0.95 });
-    this.R = new Hand(1, sleeve);
-    this.L = new Hand(-1, sleeve);
+    this.scene.add(new THREE.HemisphereLight(0xd6dbc8, 0x3c402f, 0.5));
+    const key = new THREE.DirectionalLight(0xffe9cc, 0.85); key.position.set(0.6, 1.5, 0.8); this.scene.add(key);
+    this.R = new Hand(1);
+    this.L = new Hand(-1);
     this.root.add(this.R.root, this.L.root);
     this.t = 0; this.bob = 0;
     this.sway = { x: 0, y: 0 };
     this.lungeT = 0;
   }
 
-  setEnvironment(env) { this.scene.environment = env; this.scene.environmentIntensity = 0.9; }
+  setEnvironment(env) { this.scene.environment = env; this.scene.environmentIntensity = 0.55; }
 
   onFire(hand, kind, id) {
     const h = hand === 'L' ? this.L : this.R;
@@ -140,13 +148,13 @@ export class Viewmodel {
       h.root.visible = h === this.R || !!Lw || isSupport;
       const melee = !!def && def.kind === 'melee';
       if (isSupport) h.setPose(support[3], [support[0], support[1], support[2]]);
-      else h.setPose(melee ? 'handle' : 'grip');
+      else h.setPose(melee ? 'handle' : def ? 'grip' : 'fist');
       const s = src.side;
       const big = def && def.hands === 2;
-      let x = 0.23 * s, y = -0.24, z = -0.44, rx = 0.03, ry = 0.2 * s, rz = 0;
-      if (big) { x = 0.23 * s; y = -0.26; z = -0.33; rx = 0.08; ry = 0.22 * s; }
-      if (!def) { y = -0.3; z = -0.42; rx = 0.25; ry = 0; }
-      if (melee) { x = 0.2 * s; y = -0.1; z = -0.5; ry = 0.1 * s; }
+      let x = 0.2 * s, y = -0.06, z = -0.4, rx = 0.15, ry = 0.2 * s, rz = 0;
+      if (big) { x = 0.23 * s; y = -0.12; z = -0.36; rx = 0.12; ry = 0.22 * s; }
+      if (!def) { x = 0.17 * s; y = -0.1; z = -0.36; rx = 0.2; ry = 0.15 * s; }
+      if (melee) { x = 0.2 * s; y = -0.08; z = -0.45; ry = 0.1 * s; }
       let sc = VM_SCALE * (def && !big && !melee && def.kind === 'hitscan' ? 0.85 : 1);
       if (def && def.view) { x = def.view[0] * s; y = def.view[1]; z = def.view[2]; ry = def.view[3] * s; rx = def.view[4]; if (def.view[5]) sc *= def.view[5]; }
       if (zoomed && R && h.root.visible) { x = 0; y = -0.15; z = -0.3; ry = 0; }
@@ -163,6 +171,7 @@ export class Viewmodel {
       h.root.rotation.set(rx, ry, rz);
       h.holder.rotation.set(melee ? 0.6 : 0, 0, 0);
       h.root.scale.setScalar(sc);
+      h.aimFore(this.root, [isSupport ? -0.4 : 0.46 * h.side, -0.85, isSupport ? 0.0 : 0.3]);
     }
     this.root.visible = !(zoomed && R.def.scope);
   }
