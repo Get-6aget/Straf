@@ -18,6 +18,18 @@ export class World {
     return b;
   }
 
+  // Vertical cylinder (towers, silos, barrels).
+  addCyl(x, z, r, y0, y1, type = 'solid') {
+    const b = { cyl: true, x, z, r, minX: x - r, maxX: x + r, minY: y0, maxY: y1, minZ: z - r, maxZ: z + r, type, ramp: null };
+    this.boxes.push(b);
+    return b;
+  }
+
+  containsXZ(b, x, z) {
+    if (b.cyl) return (x - b.x) ** 2 + (z - b.z) ** 2 <= b.r * b.r;
+    return x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ;
+  }
+
   // Height of a ramp top at (x, z); for plain boxes it is maxY.
   topAt(b, x, z) {
     if (!b.ramp) return b.maxY;
@@ -39,6 +51,10 @@ export class World {
 
   boxOverlap(b, minX, minY, minZ, maxX, maxY, maxZ) {
     if (!(minX < b.maxX && maxX > b.minX && minY < b.maxY && maxY > b.minY && minZ < b.maxZ && maxZ > b.minZ)) return false;
+    if (b.cyl) {
+      const qx = Math.max(minX, Math.min(maxX, b.x)), qz = Math.max(minZ, Math.min(maxZ, b.z));
+      return (qx - b.x) ** 2 + (qz - b.z) ** 2 < b.r * b.r;
+    }
     if (!b.ramp) return true;
     // Highest point of the slope under the query footprint
     const cx = Math.max(b.minX, Math.min(b.maxX, b.ramp.dir > 0 ? maxX : minX));
@@ -95,7 +111,33 @@ function planesOf(b) {
   return p;
 }
 
+function rayCyl(b, ox, oy, oz, dx, dy, dz, maxDist) {
+  let best = Infinity, n = null;
+  const fx = ox - b.x, fz = oz - b.z;
+  const c = fx * fx + fz * fz - b.r * b.r;
+  if (c <= 0 && oy >= b.minY && oy <= b.maxY) return { t: 0, nx: -dx, ny: -dy, nz: -dz };
+  const a = dx * dx + dz * dz;
+  if (a > 1e-12 && c > 0) {
+    const bb = 2 * (dx * fx + dz * fz), disc = bb * bb - 4 * a * c;
+    if (disc >= 0) {
+      const t = (-bb - Math.sqrt(disc)) / (2 * a);
+      const y = oy + dy * t;
+      if (t >= 0 && y >= b.minY && y <= b.maxY) { best = t; n = [(fx + dx * t) / b.r, 0, (fz + dz * t) / b.r]; }
+    }
+  }
+  for (const [py, ny] of [[b.maxY, 1], [b.minY, -1]]) {
+    if (Math.abs(dy) < 1e-9 || (ny > 0 ? oy < py : oy > py)) continue;
+    const t = (py - oy) / dy;
+    if (t < 0 || t >= best) continue;
+    const hx = fx + dx * t, hz = fz + dz * t;
+    if (hx * hx + hz * hz <= b.r * b.r) { best = t; n = [0, ny, 0]; }
+  }
+  if (!n || best > maxDist) return null;
+  return { t: best, nx: n[0], ny: n[1], nz: n[2] };
+}
+
 function rayConvex(b, ox, oy, oz, dx, dy, dz, maxDist) {
+  if (b.cyl) return rayCyl(b, ox, oy, oz, dx, dy, dz, maxDist);
   // quick AABB reject
   if (rayAABB(ox, oy, oz, dx, dy, dz, b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ, maxDist) < 0) return null;
   let tEnter = 0, tExit = maxDist, n = null;
