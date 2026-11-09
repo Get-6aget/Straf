@@ -22,8 +22,26 @@ const CHORDS = [ // jazzy minor progressions (scale-degree roots + 7th/9th voici
 const TITLES_A = ['Мокрый', 'Ночной', 'Тихий', 'Бетонный', 'Глубокий', 'Ржавый', 'Туманный', 'Поздний', 'Нижний', 'Сонный'];
 const TITLES_B = ['перрон', 'канал', 'свет', 'двор', 'ток', 'район', 'шлюз', 'прибой', 'туннель', 'город'];
 
+// Licensed tracks (all CC0, see docs/CREDITS.md). The procedural generator below is the fallback.
+export const TRACKS = [
+  { file: 'final-hour.mp3', title: 'Final Hour', author: 'isaiah658' },
+  { file: 'hypnotic-chill.mp3', title: 'Hypnotic Chill', author: 'cynicmusic' },
+  { file: 'bright-glitch.mp3', title: "Bright Glitch D'n'B", author: 'Gichco' },
+  { file: 'strange-piano.mp3', title: "Strange D'n'B Piano", author: 'Gichco' },
+  { file: 'lucid-trigger.mp3', title: 'Lucid Trigger', author: 'Liq_mmry' },
+];
+
 export class Music {
   constructor() {
+    this.order = TRACKS.map((t) => ({ ...t }));
+    for (let i = this.order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [this.order[i], this.order[j]] = [this.order[j], this.order[i]];
+    }
+    this.idx = 0;
+    this.failed = 0;
+    this.el = null;
+    this.fileGain = null;
     this.playing = false;
     this.timer = null;
     this.seed = (Math.random() * 1e6) | 0;
@@ -48,14 +66,56 @@ export class Music {
     };
   }
 
-  get title() { return this.track ? `${this.track.title} · ${this.track.bpm} BPM` : ''; }
+  get title() {
+    if (!this.track) return '';
+    return this.track.file ? `${this.track.title} — ${this.track.author}` : `${this.track.title} · ${this.track.bpm} BPM`;
+  }
 
-  next() { this.seed = (this.seed * 1103515245 + 12345) >>> 0; this.play(this.seed); }
-  prev() { this.seed = (this.seed - 12345) >>> 0; this.play(this.seed); }
+  get filesOk() { return this.failed < TRACKS.length; }
 
-  play(seed = this.seed) {
+  next() {
+    if (this.filesOk) return this.playFile(this.idx + 1);
+    this.seed = (this.seed * 1103515245 + 12345) >>> 0; this.play(this.seed);
+  }
+  prev() {
+    if (this.filesOk) return this.playFile(this.idx - 1);
+    this.seed = (this.seed - 12345) >>> 0; this.play(this.seed);
+  }
+
+  // Streams a licensed track (public/assets/music) through the music bus.
+  playFile(idx, dir = 1) {
     const ctx = getCtx();
     if (!ctx) return;
+    if (!this.filesOk) return this.play(this.seed);
+    this.stop(0.5);
+    const n = this.order.length;
+    this.idx = ((idx % n) + n) % n;
+    const t = this.order[this.idx];
+    const el = new Audio(import.meta.env.BASE_URL + 'assets/music/' + t.file);
+    el.preload = 'auto';
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, ctx.currentTime);
+    g.gain.linearRampToValueAtTime(1, ctx.currentTime + 1.2);
+    ctx.createMediaElementSource(el).connect(g);
+    g.connect(getMusicBus());
+    const fail = () => {
+      if (this.el !== el) return;
+      this.failed++;
+      this.stop(0.1);
+      this.playFile(this.idx + dir, dir);
+    };
+    el.onerror = fail;
+    el.onended = () => { if (this.el === el) this.playFile(this.idx + 1); };
+    this.el = el; this.fileGain = g; this.track = t; this.playing = true;
+    el.play().catch((e) => { if (e?.name !== 'AbortError') fail(); });
+    this.onChange?.(this.title);
+  }
+
+  play(seed) {
+    if (seed === undefined && this.filesOk) return this.playFile(this.idx);
+    const ctx = getCtx();
+    if (!ctx) return;
+    if (seed === undefined) seed = this.seed;
     this.stop(0.5);
     this.seed = seed;
     this.track = this.makeTrack(seed);
@@ -96,6 +156,14 @@ export class Music {
     clearInterval(this.timer);
     this.timer = null;
     this.playing = false;
+    if (this.el && ctx) {
+      const el = this.el, g = this.fileGain;
+      this.el = null;
+      el.onended = el.onerror = null;
+      g.gain.cancelScheduledValues(ctx.currentTime);
+      g.gain.setTargetAtTime(0, ctx.currentTime, fade / 3);
+      setTimeout(() => { el.pause(); el.removeAttribute('src'); g.disconnect(); }, fade * 1000 + 400);
+    }
     if (this.out && ctx) {
       const o = this.out;
       o.gain.cancelScheduledValues(ctx.currentTime);
